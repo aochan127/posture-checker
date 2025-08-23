@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ケンダル姿勢セルフチェック</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>ケンダル姿勢セルフチェック</h1>
+    <p>横から撮った写真（またはカメラ）で基準線とランドマークを置き、角度と分類を確認します。</p>
+  </header>
+  <main>
+    <section class="controls">
+      <div class="file-controls">
+        <label class="btn">
+          画像を読み込む
+          <input id="fileInput" type="file" accept="image/*" hidden />
+        </label>
+        <button id="cameraBtn" class="btn">カメラを使う</button>
+        <button id="snapBtn" class="btn" disabled>撮影</button>
+        <button id="clearBtn" class="btn-secondary">リセット</button>
+      </div>
+      <div class="plumb-controls">
+        <label>基準線（鉛直線）X: <input id="plumbX" type="number" min="0" value="0" /></label>
+        <button id="centerPlumbBtn" class="btn-secondary">中央に置く</button>
+      </div>
+      <div class="landmark-legend">
+        <h3>ランドマーク（順にクリックして置く）</h3>
+        <ol>
+          <li>耳（耳珠の近く）</li>
+          <li>肩峰</li>
+          <li>大転子</li>
+          <li>膝外側</li>
+          <li>外果</li>
+        </ol>
+      </div>
+    </section>
+    <section class="canvas-wrap">
+      <div class="canvas-col">
+        <canvas id="canvas" width="720" height="960"></canvas>
+        <video id="video" playsinline autoplay muted></video>
+      </div>
+      <aside class="results">
+        <h3>結果</h3>
+        <div id="metrics" class="metrics"></div>
+        <div id="classification" class="classification"></div>
+      </aside>
+    </section>
+    <script src="script.js"></script>
+  </main>
+</body>
+</html>
