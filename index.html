@@ -3,14 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ケンダル姿勢セルフチェック</title>
+  <title>ケンダル姿勢セルフチェック v3（AI自動抽出）</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- MediaPipe Pose (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.5.1675469414/drawing_utils.min.js"></script>
 </head>
 <body>
   <header>
-    <h1>ケンダル姿勢セルフチェック</h1>
-    <p>横から撮った写真（またはカメラ）で基準線とランドマークを置き、角度と分類を確認します。</p>
+    <h1>ケンダル姿勢セルフチェック v3</h1>
+    <p>写真を読み込むとAIが自動で5点（耳・肩・大転子・膝・外果）を抽出。必要に応じて手動修正できます。</p>
   </header>
+
   <main>
     <section class="controls">
       <div class="file-controls">
@@ -18,25 +22,41 @@
           画像を読み込む
           <input id="fileInput" type="file" accept="image/*" hidden />
         </label>
-        <button id="cameraBtn" class="btn">カメラを使う</button>
+        <button id="cameraBtn" class="btn" disabled>カメラを使う（https環境で有効）</button>
         <button id="snapBtn" class="btn" disabled>撮影</button>
+        <button id="aiBtn" class="btn-primary" disabled>AIで自動抽出</button>
         <button id="clearBtn" class="btn-secondary">リセット</button>
       </div>
-      <div class="plumb-controls">
-        <label>基準線（鉛直線）X: <input id="plumbX" type="number" min="0" value="0" /></label>
-        <button id="centerPlumbBtn" class="btn-secondary">中央に置く</button>
-      </div>
-      <div class="landmark-legend">
-        <h3>ランドマーク（順にクリックして置く）</h3>
-        <ol>
-          <li>耳（耳珠の近く）</li>
-          <li>肩峰</li>
-          <li>大転子</li>
-          <li>膝外側</li>
-          <li>外果</li>
-        </ol>
+
+      <div class="edit-controls">
+        <div class="group">
+          <label>鉛直線X: <input id="plumbX" type="number" min="0" value="0" /></label>
+          <button id="centerPlumbBtn" class="btn-secondary">中央に置く</button>
+          <label class="checkbox"><input type="checkbox" id="togglePlumb" checked> 鉛直線を表示</input></label>
+        </div>
+
+        <div class="group">
+          <label>ランドマーク選択：</label>
+          <div class="lm-picker">
+            <label><input type="radio" name="lm" value="0" checked> ①耳</label>
+            <label><input type="radio" name="lm" value="1"> ②肩</label>
+            <label><input type="radio" name="lm" value="2"> ③大転子</label>
+            <label><input type="radio" name="lm" value="3"> ④膝</label>
+            <label><input type="radio" name="lm" value="4"> ⑤外果</label>
+          </div>
+        </div>
+
+        <div class="group">
+          <label>検出サイド：</label>
+          <select id="sideSelect">
+            <option value="auto" selected>自動</option>
+            <option value="left">左側（左耳・左肩…）</option>
+            <option value="right">右側（右耳・右肩…）</option>
+          </select>
+        </div>
       </div>
     </section>
+
     <section class="canvas-wrap">
       <div class="canvas-col">
         <canvas id="canvas" width="720" height="960"></canvas>
@@ -46,9 +66,33 @@
         <h3>結果</h3>
         <div id="metrics" class="metrics"></div>
         <div id="classification" class="classification"></div>
+        <details>
+          <summary>メモ（AI検出について）</summary>
+          <ul>
+            <li>MediaPipe Poseで33点骨格を推定し、可視性が高い側の耳・肩・股関節・膝・足首を抽出しています。</li>
+            <li>耳珠は耳ランドマークの近似です。髪型や服装で誤差が増えることがあります。</li>
+            <li>必要に応じて上の「ランドマーク選択」で手動修正してください。</li>
+          </ul>
+        </details>
       </aside>
     </section>
-    <script src="script.js"></script>
+
+    <section class="howto">
+      <h3>使い方</h3>
+      <ol>
+        <li>画像を読み込む（https下ならカメラも可）。</li>
+        <li>「AIで自動抽出」を押すと、5点が自動でプロットされます。</li>
+        <li>位置が気になる点は「ランドマーク選択」を切り替えてキャンバスをタップして修正。</li>
+        <li>鉛直線は中央配置 or 数値入力、表示ON/OFF可能。</li>
+      </ol>
+      <p class="note">※処理はブラウザ内のみで完結します。画像は外部送信されません。</p>
+    </section>
   </main>
+
+  <footer>
+    <p>© 2025 AORC / Posture Checker (client-side only)</p>
+  </footer>
+
+  <script src="script.js"></script>
 </body>
 </html>
