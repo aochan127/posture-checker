@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Kendall Posture Checker — 5分類版</title>
+<title>Kendall Posture Checker — 5分類・診断版</title>
 <style>
   :root{--ink:#0f172a;--muted:#475569;--line:#e2e8f0;--card:#fff;--accent:#2563eb}
   body{font-family:system-ui,-apple-system,Segoe UI,Noto Sans JP,sans-serif;margin:0;padding:16px;background:#f8fafc;color:var(--ink)}
@@ -16,9 +16,10 @@
   .btn-primary{background:var(--accent);color:#fff}
   .btn-ghost{background:#e2e8f0;color:var(--ink)}
   #canvas{display:block;width:100%;height:auto;background:#fff;touch-action:none}
-  #log{width:100%;min-height:120px}
+  #log{width:100%;min-height:160px}
   small{color:var(--muted)}
   .kv{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  footer{margin-top:12px;color:var(--muted);font-size:.85rem}
 </style>
 </head>
 <body>
@@ -35,7 +36,7 @@
       </div>
 
       <div class="controls" style="margin-top:8px">
-        <label><b>ランドマーク編集（クリックで修正）</b></label>
+        <label><b>ランドマーク編集（タップで修正）</b></label>
         <label><input type="radio" name="lm" value="0" checked> ①耳（赤）</label>
         <label><input type="radio" name="lm" value="1"> ②肩（橙）</label>
         <label><input type="radio" name="lm" value="2"> ③大転子（黄）</label>
@@ -52,8 +53,8 @@
         </select>
       </div>
 
-      <div class="controls" style="margin-top:8px" class="kv">
-        <button id="aiBtn" class="btn btn-primary" data-ai-detect>AIで自動抽出</button>
+      <div class="controls kv" style="margin-top:8px">
+        <button id="aiBtn" class="btn btn-primary" data-ai-detect disabled>AIで自動抽出</button>
         <button id="clearBtn" class="btn btn-ghost">リセット</button>
       </div>
 
@@ -77,7 +78,7 @@
         </div>
       </div>
 
-      <!-- === しきい値（必要に応じ調整） === -->
+      <!-- === しきい値 === -->
       <div class="card" style="margin-top:8px">
         <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end">
           <div>
@@ -104,7 +105,6 @@
             <button id="thrReset" class="btn btn-ghost">推奨値に戻す</button>
           </div>
         </div>
-        <small>※pxは写真スケール依存。必要ならmm換算のスケール係数を適用。</small>
       </div>
     </div>
   </div>
@@ -120,9 +120,8 @@
       <div id="classDef" style="font-size:0.95rem; line-height:1.6; margin-top:4px"></div>
       <details style="margin-top:6px">
         <summary><b>Plumb line（プラムライン）とは？</b></summary>
-        <div style="margin-top:6px;color:#111">
+        <div style="margin-top:6px">
           Kendall の姿勢評価で使う「鉛直線」。側面観で、<u>外果（足関節外側の骨）の少し前</u>を通る基準線です。
-          この線に対して、耳・肩峰・大転子・膝・外果が前後どちらに位置するかで姿勢タイプを判定します。
         </div>
       </details>
     </div>
@@ -131,12 +130,14 @@
       <label><b>ログ</b></label>
       <textarea id="log" readonly></textarea>
     </div>
+
+    <footer>build: five_types_diag v2</footer>
   </div>
 </div>
 
 <!-- 読み込み順はこの順番で -->
 <script src="./vendor/tf.min.js"></script>
 <script src="./vendor/pose-detection.min.js"></script>
-<script src="./script.js?v=five_types_v1"></script>
+<script src="./script.js?v=five_types_diag_v2"></script>
 </body>
 </html>
