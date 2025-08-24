@@ -3,31 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Kendall Posture Checker</title>
+<title>Kendall Posture Checker — 5分類版</title>
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Noto Sans JP,sans-serif;margin:0;padding:16px;background:#f8fafc;color:#0f172a}
+  :root{--ink:#0f172a;--muted:#475569;--line:#e2e8f0;--card:#fff;--accent:#2563eb}
+  body{font-family:system-ui,-apple-system,Segoe UI,Noto Sans JP,sans-serif;margin:0;padding:16px;background:#f8fafc;color:var(--ink)}
+  h2{margin:0 0 12px}
   .row{display:flex;gap:16px;flex-wrap:wrap}
   .col{flex:1 1 360px}
-  .card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px}
-  .controls label{display:block;margin:.3rem 0 .2rem}
-  .btn-primary,.btn-secondary{padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
-  .btn-primary{background:#2563eb;color:#fff}
-  .btn-secondary{background:#e2e8f0;color:#0f172a}
-  #canvas{display:block;width:100%;height:auto;padding:0;border:0;box-sizing:content-box;touch-action:none;background:#fff}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .controls label{display:block;margin:.35rem 0 .2rem}
+  .btn{padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-ghost{background:#e2e8f0;color:var(--ink)}
+  #canvas{display:block;width:100%;height:auto;background:#fff;touch-action:none}
   #log{width:100%;min-height:120px}
-  small{color:#475569}
+  small{color:var(--muted)}
+  .kv{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 </style>
 </head>
 <body>
 
-<h2>Kendall Posture Checker</h2>
+<h2>Kendall Posture Checker — 5分類（Ideal / Kyphotic / Lordotic / Flat-back / Sway-back）</h2>
 
 <div class="row">
   <div class="col">
     <div class="card">
       <div class="controls">
         <label><b>画像を読み込む</b></label>
-        <input type="file" accept="image/*">
+        <input id="fileInput" type="file" accept="image/*">
         <small>※ドラッグ＆ドロップ／ペーストでもOK</small>
       </div>
 
@@ -49,22 +52,22 @@
         </select>
       </div>
 
-      <div class="controls" style="margin-top:8px">
-        <button id="aiBtn" class="btn-primary" data-ai-detect>AIで自動抽出</button>
-        <button id="clearBtn" class="btn-secondary">リセット</button>
+      <div class="controls" style="margin-top:8px" class="kv">
+        <button id="aiBtn" class="btn btn-primary" data-ai-detect>AIで自動抽出</button>
+        <button id="clearBtn" class="btn btn-ghost">リセット</button>
       </div>
 
       <!-- === 外果基準ライン === -->
       <div class="card" style="margin-top:8px">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="kv">
           <label>鉛直線X：
             <input id="plumbX" type="number" value="0" style="width:90px">
           </label>
-          <button id="centerPlumbBtn" class="btn-secondary">中央に線</button>
+          <button id="centerPlumbBtn" class="btn btn-ghost">中央に線</button>
           <label><input id="togglePlumb" type="checkbox" checked> 線を表示</label>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
-          <button id="plumbAtAnkleBtn" class="btn-secondary">外果に鉛直線を合わせる</button>
+        <div class="kv" style="margin-top:8px">
+          <button id="plumbAtAnkleBtn" class="btn btn-ghost">外果に鉛直線を合わせる</button>
           <label style="display:flex;gap:6px;align-items:center">
             前方オフセット
             <input id="plumbOffset" type="number" min="-50" max="100" value="12" style="width:80px">
@@ -74,38 +77,34 @@
         </div>
       </div>
 
-      <!-- === 臨床しきい値 === -->
+      <!-- === しきい値（必要に応じ調整） === -->
       <div class="card" style="margin-top:8px">
         <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end">
           <div>
-            <label>FHA：Ideal上限 <span id="vFhaIdeal">10</span>°</label>
+            <label>Ideal FHA 上限 <span id="vFhaIdeal">10</span>°</label>
             <input id="thrFhaIdeal" type="range" min="5" max="20" value="10" step="0.5" style="width:220px">
-          </div>
-          <div>
-            <label>FHA：Forward Head 閾値 <span id="vFhaFwd">18</span>°</label>
-            <input id="thrFhaFwd" type="range" min="12" max="35" value="18" step="0.5" style="width:220px">
           </div>
           <div>
             <label>大転子 中立幅 ±<span id="vHipNeutral">8</span> px</label>
             <input id="thrHipNeutral" type="range" min="4" max="25" value="8" step="1" style="width:220px">
           </div>
           <div>
-            <label>大転子 前方＝+<span id="vHipFwd">8</span> px〜</label>
-            <input id="thrHipFwd" type="range" min="5" max="40" value="8" step="1" style="width:220px">
+            <label>大転子 前方＝+<span id="vHipFwd">10</span> px〜</label>
+            <input id="thrHipFwd" type="range" min="6" max="40" value="10" step="1" style="width:220px">
           </div>
           <div>
             <label>大転子 後方＝<span id="vHipBwd">-15</span> px以下</label>
             <input id="thrHipBwd" type="range" min="-40" max="-5" value="-15" step="1" style="width:220px">
           </div>
           <div>
-            <label>膝：後方判定（補助）<span id="vKneeBack">-2</span> px以下</label>
+            <label>膝：後方判定 <span id="vKneeBack">-2</span> px以下</label>
             <input id="thrKneeBack" type="range" min="-20" max="5" value="-2" step="1" style="width:220px">
           </div>
           <div>
-            <button id="thrReset" class="btn-secondary">Kendall目安に戻す</button>
+            <button id="thrReset" class="btn btn-ghost">推奨値に戻す</button>
           </div>
         </div>
-        <small>※pxは写真スケール依存。必要ならmm換算のスケール係数を適用してください。</small>
+        <small>※pxは写真スケール依存。必要ならmm換算のスケール係数を適用。</small>
       </div>
     </div>
   </div>
@@ -117,12 +116,13 @@
 
     <div class="card" style="margin-top:8px">
       <div id="metrics"></div>
-      <div id="classification" style="margin-top:4px"></div>
+      <div id="classification" style="margin-top:4px;font-weight:bold"></div>
       <div id="classDef" style="font-size:0.95rem; line-height:1.6; margin-top:4px"></div>
       <details style="margin-top:6px">
         <summary><b>Plumb line（プラムライン）とは？</b></summary>
-        <div id="plumbHelp" style="margin-top:6px">
-          Kendall の姿勢評価で使う「鉛直線」。側面観で、<u>外果（足関節外側の骨）の少し前</u>を通る基準線です。この線に対して、耳・肩峰・大転子・膝・外果が前後どちらに位置するかで姿勢タイプを判定します。
+        <div style="margin-top:6px;color:#111">
+          Kendall の姿勢評価で使う「鉛直線」。側面観で、<u>外果（足関節外側の骨）の少し前</u>を通る基準線です。
+          この線に対して、耳・肩峰・大転子・膝・外果が前後どちらに位置するかで姿勢タイプを判定します。
         </div>
       </details>
     </div>
@@ -137,6 +137,6 @@
 <!-- 読み込み順はこの順番で -->
 <script src="./vendor/tf.min.js"></script>
 <script src="./vendor/pose-detection.min.js"></script>
-<script src="./script.js?v=clinical_v3"></script>
+<script src="./script.js?v=five_types_v1"></script>
 </body>
 </html>
