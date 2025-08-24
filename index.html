@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ケンダル姿勢セルフチェック v3b（UMD版AI付き）</title>
+  <title>ケンダル姿勢セルフチェック v3b（スタンドアロン骨組み）</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
-    <h1>ケンダル姿勢セルフチェック v3b（UMD版AI付き）</h1>
-    <p>画像表示は安定のv3b方式。AIは <b>UMDスクリプト</b>を複数CDNからロードします（モジュール未対応環境でもOK）。</p>
+    <h1>ケンダル姿勢セルフチェック v3b（スタンドアロン骨組み）</h1>
+    <p>画像表示はv3b方式（安定）。AIは <b>ローカル同梱</b> のライブラリとモデルを使用します（CDN不要）。</p>
   </header>
 
   <main>
@@ -70,6 +70,9 @@
 
   <footer><p>© 2025 AORC / Posture Checker</p></footer>
 
+  <!-- ▼ ローカル同梱スクリプトを読み込み（CDN不要）-->
+  <script src="./vendor/tf.min.js"></script>
+  <script src="./vendor/pose-detection.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
