@@ -6,15 +6,12 @@ main{padding:16px;max-width:1160px;margin:0 auto}
 .btn,.btn-secondary,.btn-primary{padding:8px 12px;margin:4px;border-radius:8px;border:0;cursor:pointer}
 .btn{background:#2563eb;color:#fff}.btn-secondary{background:#e5e7eb;color:#111}.btn-primary{background:#0ea5e9;color:#fff}
 .controls{display:grid;grid-template-columns:1.4fr 1.6fr;gap:12px;align-items:start}
-.file-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.file-controls{display:flex;flex-wrap:wrap;gap:8px}
 .edit-controls .group{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0}
 .lm-picker{display:flex;flex-wrap:wrap;gap:8px}
 .checkbox{display:inline-flex;gap:6px;align-items:center}
 .canvas-wrap{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px}
 #canvas{border:1px solid #d1d5db;background:#fff;border-radius:10px;max-width:100%}
-.preview-wrap{margin-top:10px}
-#rawPreview{max-width:100%;border:1px dashed #cbd5e1;border-radius:8px}
-.drop-hint{font-size:12px;color:#475569;margin-bottom:6px}
 .results{border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fff}
 .metrics p{margin:.3rem 0;font-variant-numeric:tabular-nums}
 .classification{margin-top:8px;padding:10px;border-radius:10px;background:#f1f5f9;border:1px dashed #cbd5e1}

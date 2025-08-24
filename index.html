@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ケンダル姿勢セルフチェック v3c5（互換モード・CDN非依存で読込）</title>
+  <title>ケンダル姿勢セルフチェック v3b+（表示安定版＋AI最小追加）</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- MediaPipe系は使わず、まずは表示の安定を優先 -->
 </head>
 <body>
   <header>
-    <h1>ケンダル姿勢セルフチェック v3c5（互換モード）</h1>
-    <p>画像の読み込み・手動プロットは <b>ライブラリ不要</b>で動作します。AI推定はボタン押下時にだけCDN読込します。</p>
+    <h1>ケンダル姿勢セルフチェック v3b+</h1>
+    <p>画像表示はv3b方式（安定）。AI自動抽出は必要時のみロード（失敗しても手動は使えます）。</p>
   </header>
 
   <main>
     <section class="controls">
       <div class="file-controls">
         <label class="btn">
-          画像を読み込む（ボタン）
-          <input id="fileInputBtn" type="file" accept="image/*" hidden />
+          画像を読み込む
+          <input id="fileInput" type="file" accept="image/*" hidden />
         </label>
-        <input id="fileInputPlain" type="file" accept="image/*" />
         <button id="aiBtn" class="btn-primary" disabled>AIで自動抽出</button>
         <button id="clearBtn" class="btn-secondary">リセット</button>
       </div>
@@ -55,12 +55,7 @@
 
     <section class="canvas-wrap">
       <div class="canvas-col">
-        <div id="dropHint" class="drop-hint">ここに画像をドラッグ＆ドロップ / クリップボード貼り付け（⌘V）可</div>
         <canvas id="canvas" width="720" height="960"></canvas>
-        <div class="preview-wrap">
-          <h4>生（raw）プレビュー &lt;img&gt;</h4>
-          <img id="rawPreview" alt="読み込んだ画像プレビュー" />
-        </div>
       </div>
       <aside class="results">
         <h3>結果</h3>
