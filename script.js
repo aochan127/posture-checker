@@ -1,10 +1,11 @@
-/* Posture Checker – Clinical FULL BUILD v2
-   - 画像取り込み ULTRA（<input> / D&D / ペースト）
+/* Posture Checker – Clinical FULL BUILD v3
+   - 画像取り込み（<input> / D&D / ペースト）
    - iPhoneタップ補正（offsetX優先 + DPR）
    - Kendall基準：外果＋オフセットに Plumb line（既定 +12px）
-   - A方式：大転子 = ヒップから外側輪郭スナップ（控えめチューニング）
+   - A方式：大転子 = ヒップ→外側輪郭スナップ（控えめ）
    - 自動分類：Ideal / Kyphotic-lordotic / Flat-back / Sway-back
-   - sway-back過多対策：3条件（ヒップ後方＋膝後方＋体幹後方）
+   - Kyphosis優先：FHA>=40°は膝が後方でもK-Lへ
+   - Sway-back抑制：FHA<=30°＋（ヒップ後方/膝後方/体幹後方）の3条件
    - 臨床しきい値UIつき（可変）
 */
 
@@ -59,15 +60,20 @@
   const COLORS = ["#ef4444","#f59e0b","#eab308","#3b82f6","#10b981"];
   const RADIUS = 14;
 
-  // ---- しきい値（保守的） ----
+  // ---- しきい値（UIで可変） ----
   const THR = {
-    FHA_IDEAL_MAX: 10,
-    FHA_FORWARD_HD: 20,
-    HIP_IDEAL_ABS: 8,
-    HIP_FWD: 12,
-    HIP_BWD: -15,
-    KNEE_BACK: -2
+    FHA_IDEAL_MAX: 10,  // Ideal のFHA上限
+    FHA_FORWARD_HD: 18,  // K-L感度を上げる（20→18）
+    HIP_IDEAL_ABS: 8,   // 大転子±
+    HIP_FWD: 8,         // K-L感度を上げる（12→8）
+    HIP_BWD: -15,       // sway-back用：ヒップ後方
+    KNEE_BACK: -2       // sway-back用：膝後方
   };
+
+  // ---- Kyphosis / Sway の固定しきい値（必要ならここで調整）----
+  const FHA_KYPHOSIS = 40;    // これ以上はK-L優先
+  const FHA_SWAY_MAX = 30;    // これ以下でないとsway-backにしない
+  const TORSO_BACK_REQ = -6;  // 体幹（肩）が骨盤より後方（px）
 
   // ---------- Utils ----------
   function log(msg){
@@ -150,6 +156,31 @@
     });
   }
 
+  // ---------- 分類ルール ----------
+  function classifyPosture(FHA, hipOffsetPx, kneeOffsetPx, torsoShiftPx){
+    const {FHA_IDEAL_MAX, HIP_IDEAL_ABS, HIP_FWD, HIP_BWD, KNEE_BACK} = THR;
+
+    // 1) 強い前屈は Kyphosis 優先
+    if (FHA >= FHA_KYPHOSIS) return "Kyphotic-lordotic";
+
+    // 2) Ideal
+    if (Math.abs(hipOffsetPx) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX) return "Ideal";
+
+    // 3) Sway-back（厳しめの3条件＋FHAが低め）
+    if (
+      FHA <= FHA_SWAY_MAX &&
+      hipOffsetPx <= HIP_BWD &&
+      kneeOffsetPx <= KNEE_BACK &&
+      torsoShiftPx <= TORSO_BACK_REQ
+    ) return "Sway-back";
+
+    // 4) Flat-back（低FHA＋ヒップ前に出ていない）
+    if (FHA < 10 && hipOffsetPx < HIP_FWD) return "Flat-back";
+
+    // 5) 残りは K-L（前寄り系を漏らさず拾う）
+    return "Kyphotic-lordotic";
+  }
+
   // ---------- 計測・分類 ----------
   function compute(){
     if (points.filter(Boolean).length<5 || plumbX<=0){
@@ -160,30 +191,12 @@
     const [ear,shoulder,hip,knee] = points;
 
     const angleDeg = Math.atan2(ear.y-shoulder.y, ear.x-shoulder.x)*180/Math.PI;
-    const FHA = Math.abs(90-Math.abs(angleDeg));
-    const hipOffsetPx  = hip.x - plumbX;   // +前 / -後
-    const kneeOffsetPx = knee.x - plumbX;  // +前 / -後
-    const torsoShiftPx = shoulder.x - hip.x; // －なら肩が骨盤より後方
-    const TORSO_BACK_REQ = -6;
+    const FHA = Math.abs(90-Math.abs(angleDeg));     // 前方頭位角
+    const hipOffsetPx  = hip.x  - plumbX;            // +前 / -後
+    const kneeOffsetPx = knee.x - plumbX;            // +前 / -後
+    const torsoShiftPx = shoulder.x - hip.x;         // ＋肩が前 / －肩が後
 
-    const {FHA_IDEAL_MAX,FHA_FORWARD_HD,HIP_IDEAL_ABS,HIP_FWD,HIP_BWD,KNEE_BACK}=THR;
-
-    let type="判定不可";
-    if (Math.abs(hipOffsetPx)<=HIP_IDEAL_ABS && FHA<=FHA_IDEAL_MAX){
-      type="Ideal";
-    }else if (FHA>FHA_FORWARD_HD && hipOffsetPx>=HIP_FWD){
-      type="Kyphotic-lordotic";
-    }else if (
-      hipOffsetPx<=HIP_BWD &&
-      kneeOffsetPx<=KNEE_BACK &&
-      torsoShiftPx<=TORSO_BACK_REQ &&
-      FHA<=18
-    ){
-      type="Sway-back";
-    }else{
-      if (FHA<10 && hipOffsetPx<HIP_FWD) type="Flat-back";
-      else type=(hipOffsetPx<0)?"Sway-back":"Flat-back";
-    }
+    const type = classifyPosture(FHA, hipOffsetPx, kneeOffsetPx, torsoShiftPx);
 
     metricsDiv.innerHTML=`
       <p><b>FHA角度</b>: ${FHA.toFixed(1)}°</p>
@@ -193,10 +206,10 @@
     classDiv.innerHTML=`<p><b>${type}</b></p>`;
 
     const defs={
-      "Ideal":`耳・肩峰・大転子・膝が鉛直線近傍に揃う。FHA≲${FHA_IDEAL_MAX}°、大転子±${HIP_IDEAL_ABS}px以内。`,
-      "Kyphotic-lordotic":`胸椎後弯↑＋腰椎前弯↑、骨盤前傾。FHA>${FHA_FORWARD_HD}°かつ大転子前方（+${HIP_FWD}px以上）。`,
+      "Ideal":`耳・肩峰・大転子・膝が鉛直線近傍。FHA≲${THR.FHA_IDEAL_MAX}°、大転子±${THR.HIP_IDEAL_ABS}px以内。`,
+      "Kyphotic-lordotic":`胸椎後弯↑＋腰椎前弯↑、骨盤前傾。FHAが大きい（≳${FHA_KYPHOSIS}°）/前寄り傾向でこちらへ。`,
       "Flat-back":"胸椎後弯↓・腰椎前弯↓、骨盤後傾。FHA<10°でカーブ平坦、大転子は中立〜やや後。",
-      "Sway-back":`骨盤後傾＋股関節伸展で体幹後方。大転子${HIP_BWD}px以下、膝${KNEE_BACK}px以下、肩も骨盤より後方。`
+      "Sway-back":`骨盤後傾＋股関節伸展で体幹後方。FHA≲${FHA_SWAY_MAX}°、大転子${THR.HIP_BWD}px以下、膝${THR.KNEE_BACK}px以下、肩も骨盤より後方。`
     };
     classDefEl.innerHTML=defs[type]||"";
   }
@@ -226,8 +239,8 @@
     hook(thrHipBwd,'HIP_BWD');
     hook(thrKneeBack,'KNEE_BACK');
     thrReset.addEventListener('click',()=>{
-      THR.FHA_IDEAL_MAX=10; THR.FHA_FORWARD_HD=20; THR.HIP_IDEAL_ABS=8;
-      THR.HIP_FWD=12; THR.HIP_BWD=-15; THR.KNEE_BACK=-2;
+      THR.FHA_IDEAL_MAX=10; THR.FHA_FORWARD_HD=18; THR.HIP_IDEAL_ABS=8;
+      THR.HIP_FWD=8; THR.HIP_BWD=-15; THR.KNEE_BACK=-2;
       thrFhaIdeal.value=THR.FHA_IDEAL_MAX;
       thrFhaFwd.value=THR.FHA_FORWARD_HD;
       thrHipNeutral.value=THR.HIP_IDEAL_ABS;
@@ -266,7 +279,7 @@
     showPlumb=togglePlumb.checked; draw();
   });
 
-  // ---------- 画像取り込み（ULTRA） ----------
+  // ---------- 画像取り込み（<input> / D&D / ペースト） ----------
   function handleDataURL(dataURL){
     imgDataURL = dataURL;
     img.onload = ()=>{
@@ -459,7 +472,7 @@
     tmp.src=imgDataURL;
   }
 
-  // AIボタン（id / data-ai-detect どちらでもOK）
+  // AIボタン
   document.addEventListener('click', (e)=>{
     const btn=e.target.closest('#aiBtn,[data-ai-detect]');
     if (!btn) return;
