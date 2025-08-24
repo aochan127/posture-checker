@@ -205,26 +205,83 @@
     }catch{ return 1; }
   }
   function drawWithOrientationToDataURL(url, orientation){
-    return new Promise((resolve,reject)=>{
-      const im = new Image();
-      im.onload = ()=>{
-        const w = im.naturalWidth || im.width;
-        const h = im.naturalHeight || im.height;
-        const off = document.createElement('canvas');
-        const octx = off.getContext('2d');
-        if (orientation>=5 && orientation<=8){ off.width = h; off.height = w; }
-        else { off.width = w; off.height = h; }
-        octx.save();
-        switch (orientation){
-          case 2: octx.translate(w,0); octx.scale(-1,1); break;
-          case 3: octx.translate(w,h); octx.rotate(Math.PI); break;
-          case 4: octx.translate(0,h); octx.scale(1,-1); break;
-          case 5: octx.rotate(0.5*Math.PI); octx.translate(0,-h); octx.scale(1,-1); break;
-          case 6: octx.rotate(0.5*Math.PI); octx.translate(0,-h); break;
-          case 7: octx.rotate(0.5*Math.PI); octx.translate(w,-h); octx.scale(-1,1); break;
-          case 8: octx.rotate(-0.5*Math.PI); octx.translate(-w,0); break;
-          default: break;
-        }
+  return new Promise((resolve,reject)=>{
+    const im = new Image();
+    im.onload = ()=>{
+      const w = im.naturalWidth || im.width;
+      const h = im.naturalHeight|| im.height;
+
+      // 回転系は先にキャンバスサイズを決め、translate → rotate の順で統一
+      let outW = w, outH = h;
+      if (orientation===5 || orientation===6 || orientation===7 || orientation===8){
+        outW = h; outH = w;   // 90°系は幅高を入れ替え
+      }
+      const off = document.createElement('canvas');
+      off.width = outW; off.height = outH;
+      const ctx = off.getContext('2d');
+
+      ctx.save();
+      switch(orientation){
+        case 2: // Mirror horizontal
+          ctx.translate(outW, 0);
+          ctx.scale(-1, 1);
+          break;
+        case 3: // Rotate 180
+          ctx.translate(outW, outH);
+          ctx.rotate(Math.PI);
+          break;
+        case 4: // Mirror vertical
+          ctx.translate(0, outH);
+          ctx.scale(1, -1);
+          break;
+        case 5: // Mirror horizontal and rotate 90 CW
+          ctx.translate(outW, 0);
+          ctx.scale(-1, 1);
+          ctx.rotate(Math.PI/2);
+          ctx.translate(0, -h);
+          break;
+        case 6: // Rotate 90 CW（←iPhone縦撮りで多い）
+          ctx.translate(outW, 0);
+          ctx.rotate(Math.PI/2);
+          ctx.translate(0, -h);
+          break;
+        case 7: // Mirror horizontal and rotate 90 CCW
+          ctx.translate(0, outH);
+          ctx.scale(1, -1);
+          ctx.rotate(-Math.PI/2);
+          ctx.translate(-w, 0);
+          break;
+        case 8: // Rotate 90 CCW
+          ctx.translate(0, outH);
+          ctx.rotate(-Math.PI/2);
+          ctx.translate(-w, 0);
+          break;
+        default: // 1 or unknown: そのまま
+          // 変換なし
+          break;
+      }
+      ctx.drawImage(im, 0, 0);
+      ctx.restore();
+
+      // 念のため：EXIFが壊れていてまだ横なら、縦長推定で追加回転
+      // 「人物の全身写真＝縦長が多い」前提の保険
+      if ((orientation===6 || orientation===8) && off.width > off.height){
+        const off2 = document.createElement('canvas');
+        off2.width = off.height; off2.height = off.width;
+        const c2 = off2.getContext('2d');
+        c2.translate(off2.width, 0);
+        c2.rotate(Math.PI/2);
+        c2.drawImage(off, 0, 0);
+        resolve(off2.toDataURL('image/jpeg', 0.95));
+        return;
+      }
+
+      resolve(off.toDataURL('image/jpeg', 0.95));
+    };
+    im.onerror = reject;
+    im.src = url;
+  });
+}
         octx.drawImage(im,0,0);
         octx.restore();
         resolve(off.toDataURL('image/jpeg', 0.95));
