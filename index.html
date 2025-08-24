@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ケンダル姿勢セルフチェック v3a（AI自動抽出・改善版）</title>
+  <title>ケンダル姿勢セルフチェック v3b（AI自動抽出・Safari修正）</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Primary CDN (jsDelivr) -->
-  <script id="mp-pose" src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.min.js"></script>
-  <script id="mp-draw" src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.5.1675469414/drawing_utils.min.js"></script>
+  <!-- Primary CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.5.1675469414/drawing_utils.min.js"></script>
   <script>
-    // Fallback to unpkg if primary fails to load within 3s
+    // Fallbacks
     window.addEventListener('load', () => {
       setTimeout(() => {
         if (!window.Pose) {
@@ -19,15 +19,14 @@
           const alt2 = document.createElement('script');
           alt2.src = 'https://unpkg.com/@mediapipe/drawing_utils@0.5.1675469414/drawing_utils.min.js';
           document.head.appendChild(alt2);
-          console.warn('Primary CDN failed; switched to unpkg.');
         }
-      }, 3000);
+      }, 2500);
     });
   </script>
 </head>
 <body>
   <header>
-    <h1>ケンダル姿勢セルフチェック v3a</h1>
+    <h1>ケンダル姿勢セルフチェック v3b</h1>
     <p>AIが5点（耳・肩・大転子・膝・外果）を自動抽出。必要に応じて手動修正できます。</p>
   </header>
 
@@ -81,15 +80,13 @@
         <div id="classification" class="classification"></div>
         <details open>
           <summary>診断・ログ</summary>
-          <pre id="log" class="logbox">準備中…</pre>
+          <pre id="log" class="logbox">読み込み完了。画像を選択してください。</pre>
         </details>
       </aside>
     </section>
   </main>
 
-  <footer>
-    <p>© 2025 AORC / Posture Checker (client-side only)</p>
-  </footer>
+  <footer><p>© 2025 AORC / Posture Checker</p></footer>
 
   <script src="script.js"></script>
 </body>
