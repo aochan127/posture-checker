@@ -15,6 +15,7 @@ const sideSelect = document.getElementById('sideSelect');
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const rawPreview = document.getElementById('rawPreview');
 const metricsDiv = document.getElementById('metrics');
 const classDiv = document.getElementById('classification');
 const dropHint = document.getElementById('dropHint');
@@ -31,7 +32,10 @@ function log(m){ logEl.textContent += (logEl.textContent? "\n":"") + m; logEl.sc
 
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(imgLoaded) ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  if(imgLoaded) {
+    try { ctx.drawImage(img,0,0,canvas.width,canvas.height); }
+    catch(e){ log("⚠️ drawImage でエラー: "+e.message); }
+  }
   if(showPlumb && plumbX>0){
     ctx.save(); ctx.strokeStyle="rgba(30,41,59,.95)"; ctx.setLineDash([8,6]); ctx.lineWidth=2;
     ctx.beginPath(); ctx.moveTo(plumbX,0); ctx.lineTo(plumbX,canvas.height); ctx.stroke(); ctx.restore();
@@ -64,14 +68,24 @@ function compute(){
   classDiv.innerHTML=`<p><b>${type}</b></p>`;
 }
 
+function handleDataURL(dataURL){
+  rawPreview.src = dataURL; // 生プレビュー
+  img = new Image();
+  img.onload = () => { imgLoaded = true; aiBtn.disabled = false; points=[]; draw(); log("画像 onload 完了。キャンバスに描画しました。"); };
+  img.onerror = (e) => { log("⚠️ img.onerror: 画像の読み込みに失敗しました。"); };
+  img.src = dataURL;
+}
+
 function handleFile(file){
-  if(!file) return;
+  if(!file){ log("⚠️ ファイルが取得できませんでした。"); return; }
   const reader = new FileReader();
   reader.onload = () => {
-    img.onload = () => { imgLoaded=true; aiBtn.disabled=false; points=[]; draw(); log("画像を読み込みました。AIボタンが有効になりました。"); };
-    img.onerror = () => { log("⚠️ 画像の読み込みに失敗しました。別の画像でお試しください。"); };
-    img.src = reader.result;
+    const dataURL = reader.result;
+    if (typeof dataURL !== 'string'){ log("⚠️ FileReader 結果が文字列ではありません。"); return; }
+    log("FileReader 読み込み成功。");
+    handleDataURL(dataURL);
   };
+  reader.onerror = () => { log("⚠️ FileReader 読み込みに失敗しました。"); };
   reader.readAsDataURL(file);
 }
 
@@ -99,7 +113,7 @@ plumbXInput.addEventListener('change',()=>{ plumbX=Math.max(0,Math.min(canvas.wi
 centerPlumbBtn.addEventListener('click',()=>{ plumbX=Math.round(canvas.width/2); plumbXInput.value=plumbX; draw(); compute(); });
 togglePlumb.addEventListener('change',()=>{ showPlumb=togglePlumb.checked; draw(); });
 
-clearBtn.addEventListener('click',()=>{ points=[]; imgLoaded=false; aiBtn.disabled=true; plumbX=0; plumbXInput.value=0; metricsDiv.innerHTML=""; classDiv.innerHTML=""; draw(); log("リセットしました。"); });
+clearBtn.addEventListener('click',()=>{ points=[]; imgLoaded=false; aiBtn.disabled=true; plumbX=0; plumbXInput.value=0; rawPreview.removeAttribute('src'); metricsDiv.innerHTML=""; classDiv.innerHTML=""; draw(); log("リセットしました。"); });
 
 let detector=null;
 async function ensureDetector(){

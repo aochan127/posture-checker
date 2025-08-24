@@ -12,6 +12,8 @@ main{padding:16px;max-width:1160px;margin:0 auto}
 .checkbox{display:inline-flex;gap:6px;align-items:center}
 .canvas-wrap{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px}
 #canvas{border:1px solid #d1d5db;background:#fff;border-radius:10px;max-width:100%}
+.preview-wrap{margin-top:10px}
+#rawPreview{max-width:100%;border:1px dashed #cbd5e1;border-radius:8px}
 .drop-hint{font-size:12px;color:#475569;margin-bottom:6px}
 .results{border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fff}
 .metrics p{margin:.3rem 0;font-variant-numeric:tabular-nums}
