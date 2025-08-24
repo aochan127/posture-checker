@@ -1,23 +1,49 @@
-/* posture-checker all-in-one + FIT + 5-classes + EXIF(paste) + Rotate (2025-08-24)
-   ✅ iPhone対応/高DPR/EXIF回転補正（アップロード/ドラッグ&ドロップ/ペースト）
+/* posture-checker ALL-IN-ONE (2025-08-24)
+   ✅ DOMContentLoaded 待ち（初期化クラッシュ防止）
+   ✅ グローバルエラーハンドラ（ログに出力）
+   ✅ EXIF補正（アップロード/ドロップ/ペースト/JPEG対応）確実版
+   ✅ 手動回転（左/右90°、ボタン自動生成フォールバック）
+   ✅ iPhone対応/高DPR/レターボックスFit
    ✅ ドラッグ編集/Undo&Redo/拡大鏡（長押し）
-   ✅ MoveNet自動抽出 + 左右サイドの妥当性スコア補強 + UIオーバーライド
-   ✅ 外果±オフセット（膝×外果で前方符号自動）
-   ✅ しきい値スライダー/臨床表示
+   ✅ MoveNet自動抽出 + サイド自動補強 + 手動切替
+   ✅ 外果±オフセット（膝×外果で前方符号推定）
+   ✅ 5区分分類：Ideal + Kypho-lordotic + Lordotic + Flat-back + Sway-back
    ✅ mm換算（身長法/物差し法）
-   ✅ 画像アスペクト比維持（レターボックス表示）
-   ✅ 軽量化：描画はrequestAnimationFrameで集約、resizeはデバウンス
-   ✅ 分類：Ideal + Kypho-lordotic + Lordotic + Flat-back + Sway-back（計5区分）
-   ✅ 手動回転（左/右90°）ボタン（存在しなければ自動生成）
-   依存: tf.min.js → pose-detection.min.js → script.js
+   ✅ 軽量化：描画はrAF集約、resizeはデバウンス
+   依存: vendor/tf.min.js → vendor/pose-detection.min.js → script.js
    モデル: ./models/movenet/model.json
 */
-(() => {
-  console.log("posture-checker loaded v=full-rotate-20250824");
 
-  // ===== DOM =====
+/* ========= グローバルエラーハンドラ（画面ログへ） ========= */
+window.addEventListener('error', (e)=>{
+  const msg = `[ERROR] ${e.message} @ ${e.filename}:${e.lineno}`;
+  console.error(msg, e.error);
+  const box = document.getElementById('log');
+  if (box) { box.value += (box.value? "\n":"")+msg; box.scrollTop = box.scrollHeight; }
+  else { alert(msg); }
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  const msg = `[PromiseRejection] ${e.reason && e.reason.message || e.reason}`;
+  console.error(msg);
+  const box = document.getElementById('log');
+  if (box) { box.value += (box.value? "\n":"")+msg; box.scrollTop = box.scrollHeight; }
+});
+
+/* ========= DOM 準備後に init 実行 ========= */
+(function bootstrap(){
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init, { once:true });
+  } else {
+    init();
+  }
+})();
+
+function init(){
+  console.log("posture-checker init start");
+
+  // ====== DOM取得 ======
   const canvas = document.getElementById('canvas');
-  const ctx    = canvas.getContext('2d');
+  const ctx    = canvas?.getContext('2d');
 
   const aiBtn  = document.getElementById('aiBtn');
   const clearBtn = document.getElementById('clearBtn');
@@ -33,7 +59,7 @@
   const classDiv   = document.getElementById('classification');
   const logEl      = document.getElementById('log');
 
-  // しきい値 UI（無ければスキップ）
+  // しきい値 UI（無ければスキップOK）
   const thrFhaIdeal   = document.getElementById('thrFhaIdeal');
   const thrFhaFwd     = document.getElementById('thrFhaFwd');
   const thrHipNeutral = document.getElementById('thrHipNeutral');
@@ -58,7 +84,7 @@
   const scaleRefPx    = document.getElementById('scaleRefPx');
   const scaleRefMm    = document.getElementById('scaleRefMm');
 
-  // ===== 状態 =====
+  // ====== 状態 ======
   let img = new Image();
   let imgLoaded  = false;
   let imgDataURL = null;
@@ -81,10 +107,10 @@
   // mm換算
   let PX_PER_MM = null; // px→mm
 
-  // 描画スタイル（小さめ）
+  // 描画スタイル
   const COLORS    = ["#ef4444","#f59e0b","#eab308","#3b82f6","#10b981"];
-  const RADIUS    = 7;     // 丸の半径
-  const FONT_SIZE = 13;    // 番号フォント
+  const RADIUS    = 7;
+  const FONT_SIZE = 13;
 
   // magnifier（長押し）
   let magnifier = { active:false, x:0, y:0, scale:2.0, r:60, timer:null };
@@ -127,7 +153,7 @@
     imgFit = { dx, dy, dw, dh, iw, ih, sx: dw/iw, sy: dh/ih };
   }
 
-  // ===== 軽量化：描画は rAF に集約 =====
+  // ===== rAF描画集約 =====
   let drawQueued = false;
   function requestDraw(){
     if (drawQueued) return;
@@ -135,7 +161,7 @@
     requestAnimationFrame(()=>{ drawQueued=false; draw(); });
   }
 
-  // ===== ユーティリティ =====
+  // ===== 共通ユーティリティ =====
   function log(msg){
     try{
       if (logEl && 'value' in logEl){
@@ -146,7 +172,6 @@
         logEl.scrollTop = logEl.scrollHeight;
       }
     }catch{}
-    // console.log(msg); // 重ければコメントアウト
   }
   function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
@@ -204,86 +229,59 @@
       return 1;
     }catch{ return 1; }
   }
+
+  // ===== 画像をEXIFに応じて回転してDataURL化（確実版） =====
   function drawWithOrientationToDataURL(url, orientation){
-  return new Promise((resolve,reject)=>{
-    const im = new Image();
-    im.onload = ()=>{
-      const w = im.naturalWidth || im.width;
-      const h = im.naturalHeight|| im.height;
+    return new Promise((resolve,reject)=>{
+      const im = new Image();
+      im.onload = ()=>{
+        const w = im.naturalWidth || im.width;
+        const h = im.naturalHeight|| im.height;
 
-      // 回転系は先にキャンバスサイズを決め、translate → rotate の順で統一
-      let outW = w, outH = h;
-      if (orientation===5 || orientation===6 || orientation===7 || orientation===8){
-        outW = h; outH = w;   // 90°系は幅高を入れ替え
-      }
-      const off = document.createElement('canvas');
-      off.width = outW; off.height = outH;
-      const ctx = off.getContext('2d');
+        let outW = w, outH = h;
+        if (orientation===5 || orientation===6 || orientation===7 || orientation===8){
+          outW = h; outH = w;   // 90°系は幅高入れ替え
+        }
+        const off = document.createElement('canvas');
+        off.width = outW; off.height = outH;
+        const c = off.getContext('2d');
 
-      ctx.save();
-      switch(orientation){
-        case 2: // Mirror horizontal
-          ctx.translate(outW, 0);
-          ctx.scale(-1, 1);
-          break;
-        case 3: // Rotate 180
-          ctx.translate(outW, outH);
-          ctx.rotate(Math.PI);
-          break;
-        case 4: // Mirror vertical
-          ctx.translate(0, outH);
-          ctx.scale(1, -1);
-          break;
-        case 5: // Mirror horizontal and rotate 90 CW
-          ctx.translate(outW, 0);
-          ctx.scale(-1, 1);
-          ctx.rotate(Math.PI/2);
-          ctx.translate(0, -h);
-          break;
-        case 6: // Rotate 90 CW（←iPhone縦撮りで多い）
-          ctx.translate(outW, 0);
-          ctx.rotate(Math.PI/2);
-          ctx.translate(0, -h);
-          break;
-        case 7: // Mirror horizontal and rotate 90 CCW
-          ctx.translate(0, outH);
-          ctx.scale(1, -1);
-          ctx.rotate(-Math.PI/2);
-          ctx.translate(-w, 0);
-          break;
-        case 8: // Rotate 90 CCW
-          ctx.translate(0, outH);
-          ctx.rotate(-Math.PI/2);
-          ctx.translate(-w, 0);
-          break;
-        default: // 1 or unknown: そのまま
-          // 変換なし
-          break;
-      }
-      ctx.drawImage(im, 0, 0);
-      ctx.restore();
+        c.save();
+        switch(orientation){
+          case 2: // Mirror horizontal
+            c.translate(outW, 0); c.scale(-1, 1); break;
+          case 3: // Rotate 180
+            c.translate(outW, outH); c.rotate(Math.PI); break;
+          case 4: // Mirror vertical
+            c.translate(0, outH); c.scale(1, -1); break;
+          case 5: // Mirror H + rotate 90 CW
+            c.translate(outW, 0); c.scale(-1, 1);
+            c.rotate(Math.PI/2); c.translate(0, -h); break;
+          case 6: // Rotate 90 CW
+            c.translate(outW, 0); c.rotate(Math.PI/2);
+            c.translate(0, -h); break;
+          case 7: // Mirror H + rotate 90 CCW
+            c.translate(0, outH); c.scale(1, -1);
+            c.rotate(-Math.PI/2); c.translate(-w, 0); break;
+          case 8: // Rotate 90 CCW
+            c.translate(0, outH); c.rotate(-Math.PI/2);
+            c.translate(-w, 0); break;
+          default: break; // 1: no transform
+        }
+        c.drawImage(im, 0, 0);
+        c.restore();
 
-      // 念のため：EXIFが壊れていてまだ横なら、縦長推定で追加回転
-      // 「人物の全身写真＝縦長が多い」前提の保険
-      if ((orientation===6 || orientation===8) && off.width > off.height){
-        const off2 = document.createElement('canvas');
-        off2.width = off.height; off2.height = off.width;
-        const c2 = off2.getContext('2d');
-        c2.translate(off2.width, 0);
-        c2.rotate(Math.PI/2);
-        c2.drawImage(off, 0, 0);
-        resolve(off2.toDataURL('image/jpeg', 0.95));
-        return;
-      }
-
-      resolve(off.toDataURL('image/jpeg', 0.95));
-    };
-    im.onerror = reject;
-    im.src = url;
-  });
-}
-        octx.drawImage(im,0,0);
-        octx.restore();
+        // 縦長保険：iOS系で既に回っているのにEXIFも残っているケース
+        if ((orientation===6 || orientation===8) && off.width > off.height){
+          const off2 = document.createElement('canvas');
+          off2.width = off.height; off2.height = off.width;
+          const c2 = off2.getContext('2d');
+          c2.translate(off2.width, 0);
+          c2.rotate(Math.PI/2);
+          c2.drawImage(off, 0, 0);
+          resolve(off2.toDataURL('image/jpeg', 0.95));
+          return;
+        }
         resolve(off.toDataURL('image/jpeg', 0.95));
       };
       im.onerror = reject;
@@ -296,7 +294,7 @@
     const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0,0,rect.width,rect.height);
 
-    // 画像（アスペクト比維持のfit描画）
+    // 画像（アスペクト比維持Fit）
     if (imgLoaded){
       ctx.drawImage(img, imgFit.dx, imgFit.dy, imgFit.dw, imgFit.dh);
     }
@@ -386,11 +384,10 @@
     HIP_BWD: -10,
     KNEE_BACK: -5
   };
-
-  // 追加の閾値（UIなしで内部固定）
+  // 追加閾値（内部固定）
   const EXTRA = {
-    LORD_FHA_MAX: 18,   // Lordotic扱いする最大FHA（Kypho-lordoticよりは小さめ）
-    KNEE_NEAR_BACK: -6  // 膝がほぼ中立（後方へ最大 -6px を許容）
+    LORD_FHA_MAX: 18,
+    KNEE_NEAR_BACK: -6
   };
 
   function bindThresholdControls(){
@@ -449,6 +446,7 @@
 
   // ===== 計測 & 判定（5区分） =====
   function compute(){
+    if (!canvas) return;
     if (points.filter(Boolean).length<5 || plumbX<=0){
       metricsDiv && (metricsDiv.innerHTML="<p>5点と鉛直線を設定してください。</p>");
       classDiv && (classDiv.innerHTML="");
@@ -457,41 +455,33 @@
     }
     const [ear, shoulder, hip, knee] = points;
     const angleDeg = Math.atan2(ear.y - shoulder.y, ear.x - shoulder.x) * 180/Math.PI;
-    const FHA = Math.abs(90 - Math.abs(angleDeg));   // Head-Forward Angle の近似
-    const hipOffsetPx  = hip.x  - plumbX;            // + = 前方, - = 後方
+    const FHA = Math.abs(90 - Math.abs(angleDeg));
+    const hipOffsetPx  = hip.x  - plumbX;
     const kneeOffsetPx = knee.x - plumbX;
 
     const {FHA_IDEAL_MAX,FHA_FORWARD_HD,HIP_IDEAL_ABS,HIP_FWD,HIP_BWD,KNEE_BACK} = THR;
 
-    // === 分類（Ideal + 4分類）
     let type = "判定不可";
 
-    // 0) Ideal（最優先）
     if (Math.abs(hipOffsetPx) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX){
       type = "Ideal";
     }
-    // 1) Kyphotic–lordotic：FHA大 + 骨盤前傾（大転子前）
     else if (FHA > FHA_FORWARD_HD && hipOffsetPx >= HIP_FWD){
       type = "Kyphotic-lordotic";
     }
-    // 2) Lordotic：FHAは中等度以下（≲18°） + 大転子前方 + 膝が明らかな後方でない
     else if (FHA <= EXTRA.LORD_FHA_MAX && hipOffsetPx >= HIP_FWD && kneeOffsetPx >= EXTRA.KNEE_NEAR_BACK){
       type = "Lordotic";
     }
-    // 3) Sway-back：大転子が後方かつ膝も後方
     else if (hipOffsetPx <= HIP_BWD && kneeOffsetPx <= KNEE_BACK){
       type = "Sway-back";
     }
-    // 4) Flat-back：FHA小さめ（≲10°）+ 骨盤後傾〜中立
     else if (FHA < 10 && hipOffsetPx < HIP_FWD){
       type = "Flat-back";
     }
-    // 5) 境界ケース：膝が後方寄りならSway-back、そうでなければFlat-backへ
     else {
       type = (kneeOffsetPx <= 0) ? "Sway-back" : "Flat-back";
     }
 
-    // mm表示（任意）
     const hipOffsetMm  = pxToMm(hipOffsetPx);
     const kneeOffsetMm = pxToMm(kneeOffsetPx);
     const showMm = (v)=> v!=null ? ` (${v.toFixed(1)} mm)` : "";
@@ -516,7 +506,7 @@
     lastMetrics = { FHA, hipOffsetPx, kneeOffsetPx, type };
   }
 
-  // ===== 画像読み込み（EXIF補正対応） =====
+  // ===== 画像読み込み =====
   async function handleBlobWithExif(blob){
     const url = URL.createObjectURL(blob);
     try{
@@ -563,10 +553,21 @@
     img.src = dataURL;
   }
 
-  // ===== 画像入力（ファイル選択 / D&D / ペースト） =====
+  // ===== 入力（ファイル選択 / D&D / ペースト） =====
+  // 直接 #fileInput にもバインド（iOS安定化）
+  const fi = document.getElementById('fileInput');
+  if (fi){
+    fi.addEventListener('change', (e)=>{
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      if (/image\/jpe?g/i.test(f.type)) handleBlobWithExif(f);
+      else blobToDataURL(f).then(handleDataURL);
+    });
+  }
+
+  // ドキュメント全体にもフォールバック
   document.addEventListener('change',e=>{
     const t=e.target; if (t?.type==='file'){ const f=t.files?.[0]; if(f){
-      // JPEGはEXIF補正、それ以外は素直に読み込み
       if (/image\/jpe?g/i.test(f.type)) handleBlobWithExif(f);
       else blobToDataURL(f).then(handleDataURL);
     }}
@@ -585,41 +586,32 @@
     }
   });
 
-  // ★ ペーストもJPEGならEXIF補正に変更
+  // ペースト：JPEGならEXIF補正
   document.addEventListener('paste', e=>{
     const items=e.clipboardData?.items||[];
     for (const it of items){
       if (!it.type?.startsWith('image/')) continue;
       const b = it.getAsFile();
       if (!b) continue;
-      if (/image\/jpe?g/i.test(b.type)) {
-        handleBlobWithExif(b);
-      } else {
-        blobToDataURL(b).then(handleDataURL);
-      }
+      if (/image\/jpe?g/i.test(b.type)) { handleBlobWithExif(b); }
+      else { blobToDataURL(b).then(handleDataURL); }
       return;
     }
   });
 
   // ===== 手動回転（UIが無ければ自動生成） =====
-  async function rotateCurrentImage(dir){ // dir = +1 (右90°) or -1 (左90°)
+  async function rotateCurrentImage(dir){ // +1:右90, -1:左90
     if (!imgDataURL) { log("画像がありません"); return; }
     const src = new Image();
     src.onload = ()=>{
       const w = src.naturalWidth || src.width;
       const h = src.naturalHeight|| src.height;
       const off = document.createElement('canvas');
-      off.width  = h;
-      off.height = w;
+      off.width  = h; off.height = w;
       const octx = off.getContext('2d');
       octx.save();
-      if (dir>0){ // 右90°
-        octx.translate(h,0);
-        octx.rotate(Math.PI/2);
-      }else{      // 左90°
-        octx.translate(0,w);
-        octx.rotate(-Math.PI/2);
-      }
+      if (dir>0){ octx.translate(h,0); octx.rotate(Math.PI/2); }
+      else{      octx.translate(0,w); octx.rotate(-Math.PI/2); }
       octx.drawImage(src,0,0);
       octx.restore();
       handleDataURL(off.toDataURL('image/jpeg',0.95));
@@ -628,8 +620,7 @@
     src.onerror = ()=> log("回転用の画像ロードに失敗しました");
     src.src = imgDataURL;
   }
-  // ボタンが無ければ簡易ボタンを自動生成
-  (function ensureRotateButtons(){
+  ;(function ensureRotateButtons(){
     const l = document.getElementById('rotateL');
     const r = document.getElementById('rotateR');
     if (l && r) return;
@@ -638,7 +629,6 @@
     const bl = document.createElement('button'); bl.id='rotateL'; bl.textContent='⟲ 左90°';
     const br = document.createElement('button'); br.id='rotateR'; br.textContent='⟳ 右90°';
     wrap.appendChild(bl); wrap.appendChild(br);
-    // 置き場所：canvasの直前 or body先頭
     const parent = canvas?.parentElement || document.body;
     parent.insertBefore(wrap, canvas);
   })();
@@ -662,7 +652,6 @@
     return best.idx;
   }
 
-  // 画像矩形外クリックを最近傍にクランプ
   function clampToImageRect(p){
     const x = clamp(p.x, imgFit.dx, imgFit.dx + imgFit.dw);
     const y = clamp(p.y, imgFit.dy, imgFit.dy + imgFit.dh);
@@ -672,9 +661,7 @@
   function startMagnifier(x,y){
     magnifier.x=x; magnifier.y=y; magnifier.active=true; requestDraw();
   }
-  function stopMagnifier(){
-    magnifier.active=false; requestDraw();
-  }
+  function stopMagnifier(){ magnifier.active=false; requestDraw(); }
 
   canvas.addEventListener('pointerdown', e=>{
     e.preventDefault();
@@ -703,9 +690,7 @@
     if (!imgLoaded) return;
     let p = getCanvasPoint(e);
     p = clampToImageRect(p);
-    if (magnifier.active){
-      magnifier.x=p.x; magnifier.y=p.y; requestDraw();
-    }
+    if (magnifier.active){ magnifier.x=p.x; magnifier.y=p.y; requestDraw(); }
     if (!drag.active) return;
     points[drag.idx] = p;
     pointSources[drag.idx]='manual';
@@ -716,9 +701,7 @@
   function endPointer(){
     magnifier.timer && clearTimeout(magnifier.timer);
     if (magnifier.active) stopMagnifier();
-    if (drag.active){
-      drag.active=false; drag.idx=-1;
-    }
+    if (drag.active){ drag.active=false; drag.idx=-1; }
   }
   canvas.addEventListener('pointerup',   endPointer);
   canvas.addEventListener('pointercancel', endPointer);
@@ -757,13 +740,13 @@
   plumbAtAnkleBtn && plumbAtAnkleBtn.addEventListener('click', ()=> { snapshot(); setPlumbFromAnkle(); });
   plumbOffset && plumbOffset.addEventListener('change', ()=> { if(points[4]) { snapshot(); setPlumbFromAnkle(); } });
 
-  // 膝×外果で“前方”方向を推定して外果±オフセットに線を置く
+  // 外果±オフセット（膝×外果で前方推定）
   function setPlumbFromAnkle(){
     const ankle=points[4], knee=points[3];
     if (!ankle || !knee){ log("⚠️ まず外果(5)と膝(4)を指定してください。"); return; }
     const rect=canvas.getBoundingClientRect();
     const offsetAbs=Math.abs(Number(plumbOffset?.value ?? 10));
-    const anteriorSign = Math.sign(knee.x - ankle.x) || 1; // 膝が外果より“つま先側”＝前
+    const anteriorSign = Math.sign(knee.x - ankle.x) || 1;
     plumbX = clamp(ankle.x + anteriorSign*offsetAbs, 0, rect.width);
     plumbXInput && (plumbXInput.value=Math.round(plumbX));
     requestDraw(); compute();
@@ -870,7 +853,6 @@
     tmp.src = imgDataURL;
   }
 
-  // サイドの適用（auto/left/right） with 妥当性スコア補強
   function applySideAndUpdate(){
     if (!lastDet){ log("⚠️ 検出キャッシュなし。AI実行後にサイド切替してください。"); return; }
     const { kps } = lastDet;
@@ -893,7 +875,6 @@
     if (!(ear&&sh&&hip&&knee&&ankle)){ log("⚠️ 必須ランドマーク不足（side="+side+"）。"); return; }
 
     const rect=canvas.getBoundingClientRect();
-    // 画像座標 → キャンバス（レターボックス後）座標に投影
     const toCanvas = kp => ({
       x: clamp(imgFit.dx + kp.x * imgFit.sx, 0, rect.width),
       y: clamp(imgFit.dy + kp.y * imgFit.sy, 0, rect.height)
@@ -907,8 +888,6 @@
   }
 
   sideSelect?.addEventListener('change', ()=>{ if(lastDet) applySideAndUpdate(); });
-
-  // AIボタン
   document.addEventListener('click', e=>{
     const btn=e.target.closest('#aiBtn,[data-ai-detect]');
     if (!btn) return;
@@ -921,4 +900,9 @@
   setupCanvasDPR();
   updateImageFit();
   requestDraw();
-})();
+
+  // 起動確認
+  if (logEl){
+    logEl.value += (logEl.value? "\n":"") + "✅ init 完了：ファイル選択・D&D・ペースト・回転・AI準備(読込後) ready";
+  }
+}
