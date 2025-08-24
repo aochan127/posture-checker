@@ -107,24 +107,48 @@
   }
 
   // ---------- 分類ルール ----------
-  function classify(FHA, hip, knee, torso){
-    const {FHA_IDEAL_MAX,HIP_IDEAL_ABS,HIP_FWD,HIP_BWD,KNEE_BACK} = THR;
+  // ---------- 分類ルール（5分類：Ideal / Kyphotic / Lordotic / Flat-back / Sway-back） ----------
+function classify(FHA, hipOffsetPx, kneeOffsetPx, torsoShiftPx){
+  // 既存のしきい値をそのまま利用（v3b の定数が上で定義済み前提）
+  const {FHA_IDEAL_MAX, HIP_IDEAL_ABS, HIP_FWD, HIP_BWD, KNEE_BACK} = THR;
+  // FHA_KYPHOSIS_STRONG / FHA_KYPHOSIS_MILD / TORSO_BACK_REQ / TORSO_FRONT_HINT は
+  // すでに上で定義されている想定（v3b）
 
-    if (FHA >= FHA_KYPHOSIS_STRONG) return "Kyphotic-lordotic";
-    if (Math.abs(hip) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX) return "Ideal";
+  // 1) Kyphotic（胸椎後弯過多）
+  if (FHA >= FHA_KYPHOSIS_STRONG) return "Kyphotic";
+  if (FHA >= FHA_KYPHOSIS_MILD && (torsoShiftPx >= TORSO_FRONT_HINT || hipOffsetPx >= HIP_FWD)) {
+    return "Kyphotic";
+  }
 
-    if (FHA <= FHA_SWAY_MAX && hip <= HIP_BWD && knee <= KNEE_BACK && torso <= TORSO_BACK_REQ)
-      return "Sway-back";
+  // 2) Lordotic（腰椎前弯過多：骨盤前傾で大転子が前方）
+  if (hipOffsetPx >= HIP_FWD && FHA < FHA_KYPHOSIS_STRONG) {
+    return "Lordotic";
+  }
 
-    if (FHA < 10 && hip < HIP_FWD) return "Flat-back";
+  // 3) Sway-back（骨盤後傾＋股関節伸展＋体幹後方）
+  if (
+    hipOffsetPx <= HIP_BWD &&
+    kneeOffsetPx <= KNEE_BACK &&
+    torsoShiftPx <= TORSO_BACK_REQ
+  ) {
+    return "Sway-back";
+  }
 
-    if ((FHA >= FHA_KYPHOSIS_MILD && (hip >= HIP_FWD || torso >= TORSO_FRONT_HINT)) || torso >= (TORSO_FRONT_HINT+4))
-      return "Kyphotic-lordotic";
-
-    if (hip <= (HIP_BWD-3) && knee <= (KNEE_BACK-2)) return "Sway-back";
-    if (hip >= (HIP_FWD+3) || torso >= (TORSO_FRONT_HINT+2)) return "Kyphotic-lordotic";
+  // 4) Flat-back（平背：カーブが平坦）
+  if (FHA <= 10 && hipOffsetPx < HIP_FWD) {
     return "Flat-back";
   }
+
+  // 5) Ideal（最後に判定）
+  if (Math.abs(hipOffsetPx) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX) {
+    return "Ideal";
+  }
+
+  // 迷う場合のタイブレーク
+  if (torsoShiftPx >= TORSO_FRONT_HINT) return "Kyphotic";
+  if (hipOffsetPx <= (HIP_BWD - 3) && kneeOffsetPx <= (KNEE_BACK - 2)) return "Sway-back";
+  return "Flat-back";
+}
 
   // ---------- 計測 ----------
   function compute(){
