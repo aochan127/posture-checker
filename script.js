@@ -519,13 +519,32 @@
     const f=[...(e.dataTransfer?.files||[])].find(x=>x.type.startsWith('image/'));
     if (f) handleBlobWithExif(f);
   });
-  // paste（EXIFなし想定）
-  document.addEventListener('paste', e=>{
-    const items=e.clipboardData?.items||[];
-    for (const it of items){
-      if (it.type?.startsWith('image/')){ const b=it.getAsFile(); if(b){ blobToDataURL(b).then(handleDataURL); return; } }
+// 手動回転：現在の imgDataURL を±90°回して再読み込み
+async function rotateCurrentImage(dir){ // dir = +1 (右90°) or -1 (左90°)
+  if (!imgDataURL) { log("画像がありません"); return; }
+  const src = new Image();
+  src.onload = ()=>{
+    const w = src.naturalWidth || src.width;
+    const h = src.naturalHeight|| src.height;
+    const off = document.createElement('canvas');
+    off.width  = h;
+    off.height = w;
+    const octx = off.getContext('2d');
+    octx.save();
+    if (dir>0){ // 右90°
+      octx.translate(h,0);
+      octx.rotate(Math.PI/2);
+    }else{      // 左90°
+      octx.translate(0,w);
+      octx.rotate(-Math.PI/2);
     }
-  });
+    octx.drawImage(src,0,0);
+    octx.restore();
+    handleDataURL(off.toDataURL('image/jpeg',0.95));
+  };
+  src.onerror = ()=> log("回転用の画像ロードに失敗しました");
+  src.src = imgDataURL;
+}
 
   // ===== 手動プロット & ドラッグ =====
   document.querySelectorAll('input[name="lm"]').forEach(r=>{
