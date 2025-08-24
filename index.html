@@ -3,22 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ケンダル姿勢セルフチェック v3c（MoveNet自動抽出）</title>
+  <title>ケンダル姿勢セルフチェック v3c2（MoveNet版・画像読込強化）</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
-    <h1>ケンダル姿勢セルフチェック v3c</h1>
-    <p>AI（MoveNet）で 5点（耳・肩・大転子・膝・外果）を自動抽出。必要に応じて手動修正できます。</p>
+    <h1>ケンダル姿勢セルフチェック v3c2</h1>
+    <p>AI（MoveNet）で5点を自動抽出。画像読み込み方法を強化しました（ボタン／直接選択／ドラッグ＆ドロップ）。</p>
   </header>
 
   <main>
     <section class="controls">
       <div class="file-controls">
         <label class="btn">
-          画像を読み込む
-          <input id="fileInput" type="file" accept="image/*" hidden />
+          画像を読み込む（ボタン）
+          <input id="fileInputBtn" type="file" accept="image/*" hidden />
         </label>
+        <input id="fileInputPlain" type="file" accept="image/*" />
         <button id="aiBtn" class="btn-primary" disabled>AIで自動抽出</button>
         <button id="clearBtn" class="btn-secondary">リセット</button>
       </div>
@@ -54,6 +55,7 @@
 
     <section class="canvas-wrap">
       <div class="canvas-col">
+        <div id="dropHint" class="drop-hint">ここに画像をドラッグ＆ドロップしてもOK</div>
         <canvas id="canvas" width="720" height="960"></canvas>
       </div>
       <aside class="results">
@@ -70,7 +72,6 @@
 
   <footer><p>© 2025 AORC / Posture Checker</p></footer>
 
-  <!-- ES module: TensorFlow.js + MoveNet -->
   <script type="module" src="script.mjs"></script>
 </body>
 </html>

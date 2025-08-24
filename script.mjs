@@ -1,11 +1,11 @@
-// ES Module version using TensorFlow.js MoveNet
 import * as tf from 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.17.0/dist/tf-core.esm.js';
 import 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.17.0/dist/tf-backend-webgl.esm.js';
 import 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.17.0/dist/tf-converter.esm.js';
 import * as posedetection from 'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@4.1.0/dist/pose-detection.esm.js';
 
 const logEl = document.getElementById('log');
-const fileInput = document.getElementById('fileInput');
+const fileInputBtn = document.getElementById('fileInputBtn');
+const fileInputPlain = document.getElementById('fileInputPlain');
 const aiBtn = document.getElementById('aiBtn');
 const clearBtn = document.getElementById('clearBtn');
 const plumbXInput = document.getElementById('plumbX');
@@ -17,6 +17,7 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const metricsDiv = document.getElementById('metrics');
 const classDiv = document.getElementById('classification');
+const dropHint = document.getElementById('dropHint');
 
 let currentEdit = 0;
 document.querySelectorAll('input[name="lm"]').forEach(r => r.addEventListener('change', ()=> currentEdit = Number(r.value)));
@@ -63,11 +64,30 @@ function compute(){
   classDiv.innerHTML=`<p><b>${type}</b></p>`;
 }
 
-fileInput.addEventListener('change', e=>{
-  const f=e.target.files[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=()=>{ img.onload=()=>{ imgLoaded=true; aiBtn.disabled=false; points=[]; draw(); log("画像を読み込みました。AIボタンが有効になりました。"); }; img.src=r.result; };
-  r.readAsDataURL(f);
+function handleFile(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    img.onload = () => { imgLoaded=true; aiBtn.disabled=false; points=[]; draw(); log("画像を読み込みました。AIボタンが有効になりました。"); };
+    img.onerror = () => { log("⚠️ 画像の読み込みに失敗しました。別の画像でお試しください。"); };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+fileInputBtn.addEventListener('change', e=> handleFile(e.target.files[0]));
+fileInputPlain.addEventListener('change', e=> handleFile(e.target.files[0]));
+
+// Drag & drop
+['dragenter','dragover'].forEach(evt => {
+  canvas.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); canvas.classList.add('drag'); dropHint.style.color='#0ea5e9'; });
+});
+['dragleave','drop'].forEach(evt => {
+  canvas.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); canvas.classList.remove('drag'); dropHint.style.color='#475569'; });
+});
+canvas.addEventListener('drop', e => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  handleFile(file);
 });
 
 canvas.addEventListener('click', e=>{
@@ -81,16 +101,12 @@ togglePlumb.addEventListener('change',()=>{ showPlumb=togglePlumb.checked; draw(
 
 clearBtn.addEventListener('click',()=>{ points=[]; imgLoaded=false; aiBtn.disabled=true; plumbX=0; plumbXInput.value=0; metricsDiv.innerHTML=""; classDiv.innerHTML=""; draw(); log("リセットしました。"); });
 
-let detector = null;
+let detector=null;
 async function ensureDetector(){
   if(detector) return detector;
-  await tf.setBackend('webgl');
-  await tf.ready();
+  await tf.setBackend('webgl'); await tf.ready();
   log("TensorFlow.js backend: "+tf.getBackend());
-  detector = await posedetection.createDetector(
-    posedetection.SupportedModels.MoveNet,
-    { modelType: 'Lightning' } // 軽量でモバイル向け
-  );
+  detector = await posedetection.createDetector(posedetection.SupportedModels.MoveNet, { modelType: 'Lightning' });
   log("MoveNet detector 初期化完了。");
   return detector;
 }
@@ -106,22 +122,16 @@ async function runAIDetect(){
   try{
     if(!imgLoaded){ log("⚠️ 先に画像を読み込んでください。"); return; }
     const det = await ensureDetector();
-    // Use offscreen canvas to feed consistent size
-    const off = document.createElement('canvas'); off.width=canvas.width; off.height=canvas.height;
-    const octx = off.getContext('2d'); octx.drawImage(img,0,0,off.width,off.height);
-
+    const off=document.createElement('canvas'); off.width=canvas.width; off.height=canvas.height;
+    const octx=off.getContext('2d'); octx.drawImage(img,0,0,off.width,off.height);
     const poses = await det.estimatePoses(off, {flipHorizontal:false});
     if(!poses || !poses.length){ log("⚠️ 検出できませんでした。全身が写る横向き写真でお試しください。"); return; }
-    const kp = poses[0].keypoints; // array of {x,y,score,name}
-
-    let side = sideSelect.value;
-    if(side==='auto') side = sideByScore(kp);
-
+    const kp = poses[0].keypoints;
+    let side=sideSelect.value; if(side==='auto') side=sideByScore(kp);
     const map = Object.fromEntries(kp.map(k=>[k.name,k]));
     const sel = side==='left'
       ? [map['left_ear'],map['left_shoulder'],map['left_hip'],map['left_knee'],map['left_ankle']]
       : [map['right_ear'],map['right_shoulder'],map['right_hip'],map['right_knee'],map['right_ankle']];
-
     points = sel.map(k => ({x:k.x, y:k.y}));
     plumbX = Math.round(points[4].x + 8); plumbXInput.value = plumbX;
     draw(); compute(); log(`AI検出完了（側: ${side}）。`);
