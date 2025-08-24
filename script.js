@@ -1,38 +1,38 @@
-/* Posture Checker – robust standalone (iPhone対応/両input対応/AI&タップずれ修正) */
+/* Posture Checker – ULTRA ROBUST (image intake + iPhone tap fix + AI)
+   - 任意の <input type="file"> を自動監視（ID不要）
+   - D&D / ペーストでの画像取り込み対応
+   - iPhoneのタップずれ補正（DPR + offsetX優先）
+   - MoveNet(TFJS) ローカルモデル対応（tf.min.js / pose-detection.min.js 必須）
+*/
 
 (() => {
   // ---------- DOM ----------
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
-
-  // 画像入力（どのIDでも拾う）
-  const fileInputBtn   = document.getElementById('fileInputBtn');   // ラベル隠し型
-  const fileInputPlain = document.getElementById('fileInputPlain'); // 通常<input>
-  const fileInputSolo  = document.getElementById('fileInput');      // 単独ID（ある場合）
   const aiBtn = document.getElementById('aiBtn');
   const clearBtn = document.getElementById('clearBtn');
   const plumbXInput = document.getElementById('plumbX');
   const centerPlumbBtn = document.getElementById('centerPlumbBtn');
   const togglePlumb = document.getElementById('togglePlumb');
   const sideSelect = document.getElementById('sideSelect');
-
   const metricsDiv = document.getElementById('metrics');
   const classDiv   = document.getElementById('classification');
-  const logEl      = document.getElementById('log'); // <pre> or <textarea> どちらでもOKにする
+  const logEl      = document.getElementById('log');
 
   // ---------- 状態 ----------
   let img = new Image();
   let imgLoaded = false;
   let imgDataURL = null;
-  let points = [null, null, null, null, null]; // 0耳,1肩,2大転子,3膝,4外果
+  let points = [null,null,null,null,null]; // 0:耳 1:肩 2:大転子 3:膝 4:外果
   let currentEdit = 0;
   let plumbX = 0;
   let showPlumb = true;
+  let detector = null;
 
   const COLORS = ["#ef4444","#f59e0b","#eab308","#3b82f6","#10b981"];
   const RADIUS = 14;
 
-  // ---------- ログ ----------
+  // ---------- Utils ----------
   function log(msg){
     if (!logEl) { console.log(msg); return; }
     if ('value' in logEl) {
@@ -44,33 +44,35 @@
     }
     console.log(msg);
   }
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
-  // ---------- DPR/座標 ----------
+  // DPR対応
   function setupCanvasDPR(){
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width  = Math.round(rect.width  * dpr);
     canvas.height = Math.round(rect.height * dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0); // 以後はCSSピクセルで描画
+    ctx.setTransform(dpr,0,0,dpr,0,0); // 以後はCSS px指定でOK
   }
 
+  // iPhoneタップ座標（offsetX優先）
   function getCanvasPoint(evt){
-    // Safariで安定する offsetX/offsetY を優先
-    if (typeof evt.offsetX === 'number' && evt.target === canvas) {
+    if (typeof evt.offsetX === 'number' && evt.target === canvas){
       const rect = canvas.getBoundingClientRect();
-      const x = Math.max(0, Math.min(rect.width,  evt.offsetX));
-      const y = Math.max(0, Math.min(rect.height, evt.offsetY));
-      return { x, y };
+      return {
+        x: clamp(evt.offsetX, 0, rect.width),
+        y: clamp(evt.offsetY, 0, rect.height)
+      };
     }
-    // フォールバック：client → canvas
     const rect = canvas.getBoundingClientRect();
     let cx, cy;
     if (evt.touches?.[0])            { cx = evt.touches[0].clientX;       cy = evt.touches[0].clientY; }
-    else if (evt.changedTouches?.[0]) { cx = evt.changedTouches[0].clientX; cy = evt.changedTouches[0].clientY; }
-    else                              { cx = evt.clientX;                   cy = evt.clientY; }
-    const x = Math.max(0, Math.min(rect.width,  cx - rect.left));
-    const y = Math.max(0, Math.min(rect.height, cy - rect.top));
-    return { x, y };
+    else if (evt.changedTouches?.[0]){ cx = evt.changedTouches[0].clientX; cy = evt.changedTouches[0].clientY; }
+    else                             { cx = evt.clientX;                   cy = evt.clientY; }
+    return {
+      x: clamp(cx - rect.left, 0, rect.width),
+      y: clamp(cy - rect.top , 0, rect.height)
+    };
   }
 
   // ---------- 描画 ----------
@@ -79,6 +81,7 @@
     ctx.clearRect(0,0,rect.width,rect.height);
     if (imgLoaded) ctx.drawImage(img, 0, 0, rect.width, rect.height);
 
+    // 鉛直線
     if (showPlumb && plumbX>0){
       ctx.save();
       ctx.strokeStyle = "rgba(30,41,59,.95)";
@@ -100,13 +103,13 @@
     for (let i=0;i<points.length;i++){
       const p = points[i];
       if (!p) continue;
-      if (!started){ ctx.moveTo(p.x,p.y); started = true; }
-      else { ctx.lineTo(p.x,p.y); }
+      if (!started){ ctx.moveTo(p.x,p.y); started=true; }
+      else ctx.lineTo(p.x,p.y);
     }
     if (started) ctx.stroke();
     ctx.restore();
 
-    // 点と番号
+    // 点＋番号
     points.forEach((p,i)=>{
       if (!p) return;
       ctx.save();
@@ -138,13 +141,11 @@
     const angle = Math.atan2(ear.y - shoulder.y, ear.x - shoulder.x) * 180/Math.PI;
     const fha = Math.abs(90 - Math.abs(angle));
     const hipOffset = hip.x - plumbX;
-
     let type="判定不可";
-    if (Math.abs(hipOffset) < 10 && fha < 12) type="Ideal";
-    else if (fha > 20 && hipOffset > 20)      type="Kyphotic-lordotic";
-    else if (hipOffset < -10)                 type="Sway-back";
-    else                                      type="Flat-back";
-
+    if (Math.abs(hipOffset)<10 && fha<12) type="Ideal";
+    else if (fha>20 && hipOffset>20)      type="Kyphotic-lordotic";
+    else if (hipOffset<-10)               type="Sway-back";
+    else                                  type="Flat-back";
     metricsDiv && (metricsDiv.innerHTML = `
       <p><b>FHA角度</b>: ${fha.toFixed(1)}°</p>
       <p><b>大転子オフセット</b>: ${hipOffset.toFixed(0)} px</p>
@@ -152,10 +153,63 @@
     classDiv && (classDiv.innerHTML = `<p><b>${type}</b></p>`);
   }
 
-  // ---------- 画像読み込み ----------
+  // ---------- 画像取り込み（超ロバスト） ----------
+  // 1) どの <input type="file"> でも拾う（動的に増えてもOK）
+  function onAnyFileInputChange(e){
+    const inp = e.target;
+    if (!inp || inp.type !== 'file') return;
+    const file = inp.files && inp.files[0];
+    if (!file) { log("⚠️ ファイル未選択"); return; }
+    if (!file.type.startsWith('image/')){
+      log(`⚠️ 画像以外が選ばれました（type=${file.type}）。JPEG/PNG/WEBP を選んでください。`);
+      return;
+    }
+    readFileToDataURL(file);
+  }
+  document.addEventListener('change', onAnyFileInputChange, true);
+
+  // 2) ドラッグ＆ドロップ（キャンバス／ページ）
+  function preventDefaults(e){ e.preventDefault(); e.stopPropagation(); }
+  ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+    document.addEventListener(ev, preventDefaults, false);
+    canvas.addEventListener(ev, preventDefaults, false);
+  });
+  document.addEventListener('drop', e=>{
+    const file = [...(e.dataTransfer?.files||[])].find(f=>f.type.startsWith('image/'));
+    if (file) readFileToDataURL(file);
+  });
+
+  // 3) ペースト（写真をコピー→貼付）
+  document.addEventListener('paste', e=>{
+    const items = e.clipboardData?.items || [];
+    for (const it of items){
+      if (it.type && it.type.startsWith('image/')){
+        const blob = it.getAsFile();
+        if (blob) { readBlobToDataURL(blob); return; }
+      }
+    }
+  });
+
+  // File/Blob → DataURL
+  function readBlobToDataURL(blob){
+    // HEIC/HEIF はブラウザによって非対応：Safariでは自動変換されない場合あり
+    if (blob.type && !/^image\/(png|jpeg|jpg|webp|gif|bmp)$/i.test(blob.type)){
+      log(`⚠️ 形式 ${blob.type} は表示できない可能性があります。写真を「JPEG/PNGで保存」してからお試しください。`);
+    }
+    const r = new FileReader();
+    r.onload = ()=> {
+      if (typeof r.result !== 'string'){ log("⚠️ 読み込み結果が文字列ではありません。"); return; }
+      handleDataURL(r.result);
+    };
+    r.onerror = ()=> log("⚠️ 画像の読み込みに失敗しました（FileReader）。");
+    r.readAsDataURL(blob);
+  }
+  function readFileToDataURL(file){ readBlobToDataURL(file); }
+
+  // DataURL → Image
   function handleDataURL(dataURL){
     imgDataURL = dataURL;
-    img.onload = () => {
+    img.onload = ()=>{
       imgLoaded = true;
       setupCanvasDPR();
       points = [null,null,null,null,null];
@@ -163,32 +217,14 @@
       draw();
       log("画像 onload 完了。");
     };
-    img.onerror = () => log("⚠️ 画像の読み込みに失敗しました。");
+    img.onerror = ()=> log("⚠️ 画像の読み込みに失敗しました（img.onerror）。");
     img.src = dataURL;
   }
 
-  function handleFile(file){
-    if (!file){ log("⚠️ ファイル未選択"); return; }
-    const r = new FileReader();
-    r.onload = () => {
-      if (typeof r.result !== "string"){ log("⚠️ FileReader結果が文字列ではありません。"); return; }
-      log("FileReader 読み込み成功。");
-      handleDataURL(r.result);
-    };
-    r.onerror = () => log("⚠️ FileReader 読み込みに失敗しました。");
-    r.readAsDataURL(file);
-  }
-
-  // どの入力でも拾う
-  [fileInputBtn, fileInputPlain, fileInputSolo].forEach(inp=>{
-    if (inp) inp.addEventListener('change', e => handleFile(e.target.files?.[0]));
-  });
-
-  // ---------- 手動編集（タップ） ----------
+  // ---------- 手動編集 ----------
   document.querySelectorAll('input[name="lm"]').forEach(r=>{
     r.addEventListener('change', ()=> currentEdit = Number(r.value||0));
   });
-
   canvas.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
     if (!imgLoaded) return;
@@ -201,17 +237,15 @@
   plumbXInput && plumbXInput.addEventListener('change', ()=>{
     const rect = canvas.getBoundingClientRect();
     const v = Number(plumbXInput.value || 0);
-    plumbX = Math.max(0, Math.min(rect.width, v));
+    plumbX = clamp(v, 0, rect.width);
     draw(); compute();
   });
-
   centerPlumbBtn && centerPlumbBtn.addEventListener('click', ()=>{
     const rect = canvas.getBoundingClientRect();
     plumbX = Math.round(rect.width/2);
     plumbXInput && (plumbXInput.value = plumbX);
     draw(); compute();
   });
-
   togglePlumb && togglePlumb.addEventListener('change', ()=>{
     showPlumb = togglePlumb.checked;
     draw();
@@ -231,10 +265,9 @@
     log("リセットしました。");
   });
 
-  // ---------- 画面リサイズ ----------
+  // ---------- リサイズ ----------
   window.addEventListener('resize', ()=>{
     if (!imgLoaded) return;
-    // 既存点を比率で再配置
     const dpr = window.devicePixelRatio || 1;
     const oldW = canvas.width/dpr, oldH = canvas.height/dpr;
     const rect = canvas.getBoundingClientRect();
@@ -246,25 +279,22 @@
     draw(); compute();
   });
 
-  // ---------- AI（ローカルMoveNet） ----------
-  let detector = null;
-
-  function assertVendors(){
+  // ---------- AI ----------
+  function vendorsOK(){
     const ok = !!(window.tf && window.poseDetection);
     if (!window.tf) log("⚠️ tf.min.js が読み込まれていません（/vendor/tf.min.js）");
     if (!window.poseDetection) log("⚠️ pose-detection.min.js が読み込まれていません（/vendor/pose-detection.min.js）");
     return ok;
   }
 
-  async function ensureDetectorLocal(){
+  async function ensureDetector(){
     if (detector) return detector;
-    if (!assertVendors()) return null;
+    if (!vendorsOK()) return null;
     try{
       try { await tf.setBackend('webgl'); } catch(e){}
       await tf.ready();
       if (tf.getBackend() !== 'webgl'){ await tf.setBackend('cpu'); await tf.ready(); }
       log('TensorFlow.js backend: ' + tf.getBackend());
-
       const mt = (poseDetection.movenet?.modelType?.SINGLEPOSE_LIGHTNING) || 'SINGLEPOSE_LIGHTNING';
       detector = await poseDetection.createDetector(
         poseDetection.SupportedModels.MoveNet,
@@ -278,7 +308,7 @@
     }
   }
 
-  function pickSideKeypoints(kps){
+  function pickSide(kps){
     const L=['left_ear','left_shoulder','left_hip','left_knee','left_ankle'];
     const R=['right_ear','right_shoulder','right_hip','right_knee','right_ankle'];
     const avg = names => {
@@ -286,25 +316,22 @@
       return c? s/c : 0;
     };
     const pref = sideSelect?.value || 'auto';
-    let useRight;
-    if (pref==='left') useRight=false; else if (pref==='right') useRight=true; else useRight = (avg(R)>avg(L));
-    const names = useRight? R : L;
-    const out = {};
-    names.forEach(n=>{ const kp=kps.find(x=>x.name===n); if(kp) out[n]=kp; });
-    return { out, side: useRight?'right':'left' };
+    if (pref==='left')  return {names:L, side:'left'};
+    if (pref==='right') return {names:R, side:'right'};
+    return (avg(R)>avg(L)) ? {names:R, side:'right'} : {names:L, side:'left'};
   }
 
-  function mapToCanvas(kp, iw, ih){
+  function toCanvas(kp, iw, ih){
     const rect = canvas.getBoundingClientRect();
     return {
-      x: Math.max(0, Math.min(rect.width,  kp.x * (rect.width/iw))),
-      y: Math.max(0, Math.min(rect.height, kp.y * (rect.height/ih)))
+      x: clamp(kp.x * (rect.width/iw),  0, rect.width),
+      y: clamp(kp.y * (rect.height/ih), 0, rect.height)
     };
   }
 
   async function runAutoDetect(){
     if (!imgLoaded || !imgDataURL){ log("⚠️ 先に画像を読み込んでください。"); return; }
-    const det = await ensureDetectorLocal();
+    const det = await ensureDetector();
     if (!det){ log("⚠️ Detectorの用意に失敗しました。"); return; }
 
     const tmp = new Image();
@@ -314,27 +341,30 @@
         const kps = res?.[0]?.keypoints;
         if (!kps){ log("⚠️ 検出結果が空です。"); return; }
 
-        const { out, side } = pickSideKeypoints(kps);
-        const ear   = out[(side==='right')?'right_ear':'left_ear'];
-        const sh    = out[(side==='right')?'right_shoulder':'left_shoulder'];
-        const hip   = out[(side==='right')?'right_hip':'left_hip'];
-        const knee  = out[(side==='right')?'right_knee':'left_knee'];
-        const ankle = out[(side==='right')?'right_ankle':'left_ankle'];
+        const sel = pickSide(kps);
+        const map = {};
+        sel.names.forEach(n=>{ const kp=kps.find(x=>x.name===n); if(kp) map[n]=kp; });
+
+        const ear   = map[(sel.side==='right')?'right_ear':'left_ear'];
+        const sh    = map[(sel.side==='right')?'right_shoulder':'left_shoulder'];
+        const hip   = map[(sel.side==='right')?'right_hip':'left_hip'];
+        const knee  = map[(sel.side==='right')?'right_knee':'left_knee'];
+        const ankle = map[(sel.side==='right')?'right_ankle':'left_ankle'];
         if (!(ear&&sh&&hip&&knee&&ankle)){ log("⚠️ 必要ランドマークを十分に検出できませんでした。"); return; }
 
         const iw = tmp.naturalWidth||tmp.width, ih = tmp.naturalHeight||tmp.height;
-        points = [ear,sh,hip,knee,ankle].map(k => mapToCanvas(k, iw, ih));
+        points = [ear,sh,hip,knee,ankle].map(k => toCanvas(k, iw, ih));
         draw(); compute();
-        log(`AI検出完了（side: ${side}）`);
+        log(`AI検出完了（side: ${sel.side}）`);
       }catch(e){
         log("検出エラー: " + (e?.message || e));
       }
     };
-    tmp.onerror = () => log("⚠️ 画像の再ロードに失敗しました。");
+    tmp.onerror = ()=> log("⚠️ 画像の再ロードに失敗しました。");
     tmp.src = imgDataURL;
   }
 
-  // AIボタン押下（id or data属性どちらでも拾う）
+  // AIボタン（id / data-ai-detect どちらでも）
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('#aiBtn, [data-ai-detect]');
     if (!btn) return;
