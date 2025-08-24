@@ -20,7 +20,7 @@
           <input id="fileInputBtn" type="file" accept="image/*;capture=environment" hidden />
         </label>
         <input id="fileInputPlain" type="file" accept="image/*" />
-        <button id="aiBtn" class="btn-primary" disabled>AIで自動抽出</button>
+        <button id="aiBtn" class="btn-primary" data-ai-detect>AIで自動抽出</button>
         <button id="clearBtn" class="btn-secondary">リセット</button>
       </div>
 
@@ -75,6 +75,9 @@
 
   <footer><p>© 2025 AORC / Posture Checker</p></footer>
 
-  <script src="script.js"></script>
+  <script src="./vendor/tf.min.js"></script>
+　<script src="./vendor/pose-detection.min.js"></script>
+　<script src="./script.js"></script>
+
 </body>
 </html>
