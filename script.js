@@ -1,14 +1,15 @@
-/* Posture Checker – ULTRA ROBUST (image intake + iPhone tap fix + AI)
-   - 任意の <input type="file"> を自動監視（ID不要）
-   - D&D / ペーストでの画像取り込み対応
-   - iPhoneのタップずれ補正（DPR + offsetX優先）
-   - MoveNet(TFJS) ローカルモデル対応（tf.min.js / pose-detection.min.js 必須）
+/* Posture Checker – ULTRA ROBUST + Ankle-Plumb (iPhone対応/全入力対応/AI搭載)
+   - 任意の <input type="file"> を自動監視（ID不要）＋ D&D ＋ ペースト
+   - iPhoneタップずれ補正（DPR + offsetX優先）
+   - Kendall 準拠：鉛直線 = 外果(5点目) の “やや前方” に自動配置（デフォ +10px）
+   - MoveNet(TFJS) ローカルモデル（tf.min.js / pose-detection.min.js 必須）
 */
 
 (() => {
   // ---------- DOM ----------
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
+
   const aiBtn = document.getElementById('aiBtn');
   const clearBtn = document.getElementById('clearBtn');
   const plumbXInput = document.getElementById('plumbX');
@@ -19,11 +20,15 @@
   const classDiv   = document.getElementById('classification');
   const logEl      = document.getElementById('log');
 
+  // 追加：外果基準UI（無ければ null になる→コード側で安全に扱う）
+  const plumbOffset     = document.getElementById('plumbOffset');      // number input（px）
+  const plumbAtAnkleBtn = document.getElementById('plumbAtAnkleBtn');  // 「外果に合わせる」ボタン
+
   // ---------- 状態 ----------
   let img = new Image();
   let imgLoaded = false;
   let imgDataURL = null;
-  let points = [null,null,null,null,null]; // 0:耳 1:肩 2:大転子 3:膝 4:外果
+  let points = [null,null,null,null,null]; // 0耳,1肩,2大転子,3膝,4外果
   let currentEdit = 0;
   let plumbX = 0;
   let showPlumb = true;
@@ -32,7 +37,7 @@
   const COLORS = ["#ef4444","#f59e0b","#eab308","#3b82f6","#10b981"];
   const RADIUS = 14;
 
-  // ---------- Utils ----------
+  // ---------- ログ ----------
   function log(msg){
     if (!logEl) { console.log(msg); return; }
     if ('value' in logEl) {
@@ -46,13 +51,13 @@
   }
   function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
-  // DPR対応
+  // ---------- DPR/座標 ----------
   function setupCanvasDPR(){
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width  = Math.round(rect.width  * dpr);
     canvas.height = Math.round(rect.height * dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0); // 以後はCSS px指定でOK
+    ctx.setTransform(dpr,0,0,dpr,0,0); // 以後はCSS px基準でOK
   }
 
   // iPhoneタップ座標（offsetX優先）
@@ -142,10 +147,10 @@
     const fha = Math.abs(90 - Math.abs(angle));
     const hipOffset = hip.x - plumbX;
     let type="判定不可";
-    if (Math.abs(hipOffset)<10 && fha<12) type="Ideal";
-    else if (fha>20 && hipOffset>20)      type="Kyphotic-lordotic";
-    else if (hipOffset<-10)               type="Sway-back";
-    else                                  type="Flat-back";
+    if (Math.abs(hipOffset) < 10 && fha < 12) type="Ideal";
+    else if (fha > 20 && hipOffset > 20)      type="Kyphotic-lordotic";
+    else if (hipOffset < -10)                 type="Sway-back";
+    else                                      type="Flat-back";
     metricsDiv && (metricsDiv.innerHTML = `
       <p><b>FHA角度</b>: ${fha.toFixed(1)}°</p>
       <p><b>大転子オフセット</b>: ${hipOffset.toFixed(0)} px</p>
@@ -153,60 +158,7 @@
     classDiv && (classDiv.innerHTML = `<p><b>${type}</b></p>`);
   }
 
-  // ---------- 画像取り込み（超ロバスト） ----------
-  // 1) どの <input type="file"> でも拾う（動的に増えてもOK）
-  function onAnyFileInputChange(e){
-    const inp = e.target;
-    if (!inp || inp.type !== 'file') return;
-    const file = inp.files && inp.files[0];
-    if (!file) { log("⚠️ ファイル未選択"); return; }
-    if (!file.type.startsWith('image/')){
-      log(`⚠️ 画像以外が選ばれました（type=${file.type}）。JPEG/PNG/WEBP を選んでください。`);
-      return;
-    }
-    readFileToDataURL(file);
-  }
-  document.addEventListener('change', onAnyFileInputChange, true);
-
-  // 2) ドラッグ＆ドロップ（キャンバス／ページ）
-  function preventDefaults(e){ e.preventDefault(); e.stopPropagation(); }
-  ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
-    document.addEventListener(ev, preventDefaults, false);
-    canvas.addEventListener(ev, preventDefaults, false);
-  });
-  document.addEventListener('drop', e=>{
-    const file = [...(e.dataTransfer?.files||[])].find(f=>f.type.startsWith('image/'));
-    if (file) readFileToDataURL(file);
-  });
-
-  // 3) ペースト（写真をコピー→貼付）
-  document.addEventListener('paste', e=>{
-    const items = e.clipboardData?.items || [];
-    for (const it of items){
-      if (it.type && it.type.startsWith('image/')){
-        const blob = it.getAsFile();
-        if (blob) { readBlobToDataURL(blob); return; }
-      }
-    }
-  });
-
-  // File/Blob → DataURL
-  function readBlobToDataURL(blob){
-    // HEIC/HEIF はブラウザによって非対応：Safariでは自動変換されない場合あり
-    if (blob.type && !/^image\/(png|jpeg|jpg|webp|gif|bmp)$/i.test(blob.type)){
-      log(`⚠️ 形式 ${blob.type} は表示できない可能性があります。写真を「JPEG/PNGで保存」してからお試しください。`);
-    }
-    const r = new FileReader();
-    r.onload = ()=> {
-      if (typeof r.result !== 'string'){ log("⚠️ 読み込み結果が文字列ではありません。"); return; }
-      handleDataURL(r.result);
-    };
-    r.onerror = ()=> log("⚠️ 画像の読み込みに失敗しました（FileReader）。");
-    r.readAsDataURL(blob);
-  }
-  function readFileToDataURL(file){ readBlobToDataURL(file); }
-
-  // DataURL → Image
+  // ---------- データURL → 画像 ----------
   function handleDataURL(dataURL){
     imgDataURL = dataURL;
     img.onload = ()=>{
@@ -221,15 +173,65 @@
     img.src = dataURL;
   }
 
-  // ---------- 手動編集 ----------
+  // ---------- 画像取り込み（全対応） ----------
+  function readBlobToDataURL(blob){
+    if (blob.type && !/^image\//i.test(blob.type)){
+      log(`⚠️ 画像ではありません（type=${blob.type}）`);
+      return;
+    }
+    const r = new FileReader();
+    r.onload = ()=>{
+      if (typeof r.result !== 'string'){ log("⚠️ 読み込み結果が文字列ではありません。"); return; }
+      handleDataURL(r.result);
+    };
+    r.onerror = ()=> log("⚠️ 画像の読み込みに失敗しました（FileReader）。");
+    r.readAsDataURL(blob);
+  }
+  function readFileToDataURL(file){ if (file) readBlobToDataURL(file); }
+
+  // 1) 任意の <input type="file">
+  document.addEventListener('change', (e)=>{
+    const t = e.target;
+    if (t && t.type === 'file'){
+      const f = t.files?.[0];
+      if (f) readFileToDataURL(f);
+    }
+  }, true);
+
+  // 2) D&D
+  function preventDefaults(e){ e.preventDefault(); e.stopPropagation(); }
+  ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
+    document.addEventListener(ev, preventDefaults, false);
+    canvas.addEventListener(ev, preventDefaults, false);
+  });
+  document.addEventListener('drop', e=>{
+    const f = [...(e.dataTransfer?.files||[])].find(x=>x.type.startsWith('image/'));
+    if (f) readFileToDataURL(f);
+  });
+
+  // 3) ペースト
+  document.addEventListener('paste', e=>{
+    const items = e.clipboardData?.items || [];
+    for (const it of items){
+      if (it.type && it.type.startsWith('image/')){
+        const blob = it.getAsFile();
+        if (blob) { readBlobToDataURL(blob); return; }
+      }
+    }
+  });
+
+  // ---------- 手動編集（タップ） ----------
   document.querySelectorAll('input[name="lm"]').forEach(r=>{
     r.addEventListener('change', ()=> currentEdit = Number(r.value||0));
   });
+
   canvas.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
     if (!imgLoaded) return;
     const p = getCanvasPoint(e);
     points[currentEdit] = p;
+    // 外果(=index4)を置いたら自動で鉛直線を外果＋オフセットに合わせる
+    if (currentEdit === 4) setPlumbFromAnkle();
     draw(); compute();
   }, { passive:false });
 
@@ -240,15 +242,27 @@
     plumbX = clamp(v, 0, rect.width);
     draw(); compute();
   });
+
   centerPlumbBtn && centerPlumbBtn.addEventListener('click', ()=>{
     const rect = canvas.getBoundingClientRect();
     plumbX = Math.round(rect.width/2);
     plumbXInput && (plumbXInput.value = plumbX);
     draw(); compute();
   });
+
   togglePlumb && togglePlumb.addEventListener('change', ()=>{
     showPlumb = togglePlumb.checked;
     draw();
+  });
+
+  // 外果に合わせる（ボタン）
+  plumbAtAnkleBtn && plumbAtAnkleBtn.addEventListener('click', ()=>{
+    setPlumbFromAnkle();
+  });
+
+  // オフセット変更したら即反映（外果があれば）
+  plumbOffset && plumbOffset.addEventListener('change', ()=>{
+    if (points[4]) setPlumbFromAnkle();
   });
 
   // ---------- リセット ----------
@@ -276,8 +290,26 @@
     points = points.map(p => p ? { x:p.x*rx, y:p.y*ry } : p);
     plumbX *= rx;
     setupCanvasDPR();
+    // 外果があるなら、基準線を外果＋オフセットで再調整
+    if (points[4]) setPlumbFromAnkle();
     draw(); compute();
   });
+
+  // ---------- Kendall準拠：外果に合わせる ----------
+  function setPlumbFromAnkle(){
+    const ankle = points[4];
+    if (!ankle){
+      log("⚠️ まず外果（5点目）を指定してください。");
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const offsetPx = Number(plumbOffset?.value ?? 10); // デフォルト +10px
+    // “やや前方”＝画像の右方向（撮影向きにより逆なら負値に）
+    plumbX = clamp(ankle.x + offsetPx, 0, rect.width);
+    plumbXInput && (plumbXInput.value = Math.round(plumbX));
+    draw(); compute();
+    log(`鉛直線を外果＋${offsetPx}pxに合わせました。`);
+  }
 
   // ---------- AI ----------
   function vendorsOK(){
@@ -354,6 +386,10 @@
 
         const iw = tmp.naturalWidth||tmp.width, ih = tmp.naturalHeight||tmp.height;
         points = [ear,sh,hip,knee,ankle].map(k => toCanvas(k, iw, ih));
+
+        // ★ 外果に合わせて鉛直線を再配置（Kendall準拠）
+        setPlumbFromAnkle();
+
         draw(); compute();
         log(`AI検出完了（side: ${sel.side}）`);
       }catch(e){
