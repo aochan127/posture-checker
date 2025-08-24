@@ -189,17 +189,29 @@
       KNEE_BACK
     } = THR;
 
-    let type = "判定不可";
-    if (Math.abs(hipOffsetPx) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX) {
-      type = "Ideal";
-    } else if (FHA > FHA_FORWARD_HD && hipOffsetPx >= HIP_FWD) {
-      type = "Kyphotic-lordotic";
-    } else if (hipOffsetPx <= HIP_BWD && FHA >= 8 && kneeOffsetPx <= KNEE_BACK) {
-      type = "Sway-back";
-    } else {
-      if (FHA < 10 && hipOffsetPx < HIP_FWD) type = "Flat-back";
-      else type = (hipOffsetPx < 0) ? "Sway-back" : "Flat-back";
-    }
+let type = "判定不可";
+
+// 1) Ideal
+if (Math.abs(hipOffsetPx) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX) {
+  type = "Ideal";
+}
+// 2) Kyphotic-lordotic
+else if (FHA > FHA_FORWARD_HD && hipOffsetPx >= HIP_FWD) {
+  type = "Kyphotic-lordotic";
+}
+// 3) Sway-back（厳しめのダブル条件）
+else if (
+  hipOffsetPx <= HIP_BWD &&          // 大転子が十分「後方」
+  kneeOffsetPx <= KNEE_BACK &&       // 膝も線よりわずかに後方
+  FHA <= 18                          // 頭部前方が強すぎない（強いならK-Lへ）
+) {
+  type = "Sway-back";
+}
+// 4) Flat-back（残り）
+else {
+  if (FHA < 10 && hipOffsetPx < HIP_FWD) type = "Flat-back";
+  else type = (hipOffsetPx < 0) ? "Sway-back" : "Flat-back";
+}
 
     metricsDiv && (metricsDiv.innerHTML = `
       <p><b>FHA角度</b>: ${FHA.toFixed(1)}°</p>
@@ -250,12 +262,12 @@
     hook(thrKneeBack,   'KNEE_BACK');
 
     thrReset?.addEventListener('click', ()=>{
-      THR.FHA_IDEAL_MAX = 12;
+      THR.FHA_IDEAL_MAX = 10;
       THR.FHA_FORWARD_HD = 20;
-      THR.HIP_IDEAL_ABS  = 10;
-      THR.HIP_FWD = 10;
-      THR.HIP_BWD = -10;
-      THR.KNEE_BACK = -5;
+      THR.HIP_IDEAL_ABS  = 8;
+      THR.HIP_FWD = 12;
+      THR.HIP_BWD = -15;
+      THR.KNEE_BACK = -2;
       thrFhaIdeal.value   = THR.FHA_IDEAL_MAX;
       thrFhaFwd.value     = THR.FHA_FORWARD_HD;
       thrHipNeutral.value = THR.HIP_IDEAL_ABS;
