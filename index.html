@@ -30,6 +30,7 @@
         <input type="file" accept="image/*">
         <small>※ドラッグ＆ドロップ／ペーストでもOK</small>
       </div>
+
       <div class="controls" style="margin-top:8px">
         <label><b>ランドマーク編集（クリックで修正）</b></label>
         <label><input type="radio" name="lm" value="0" checked> ①耳（赤）</label>
@@ -66,10 +67,10 @@
           <button id="plumbAtAnkleBtn" class="btn-secondary">外果に鉛直線を合わせる</button>
           <label style="display:flex;gap:6px;align-items:center">
             前方オフセット
-            <input id="plumbOffset" type="number" min="-50" max="100" value="10" style="width:80px">
+            <input id="plumbOffset" type="number" min="-50" max="100" value="12" style="width:80px">
             <span>px</span>
           </label>
-          <small>※Kendall：外果の“やや前方”に鉛直線（デフォルト +10px）</small>
+          <small>※Kendall：外果の“やや前方”に鉛直線（既定 +12px）</small>
         </div>
       </div>
 
@@ -77,28 +78,28 @@
       <div class="card" style="margin-top:8px">
         <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end">
           <div>
-            <label>FHA：Ideal上限 <span id="vFhaIdeal">12</span>°</label>
-            <input id="thrFhaIdeal" type="range" min="5" max="20" value="12" step="0.5" style="width:220px">
+            <label>FHA：Ideal上限 <span id="vFhaIdeal">10</span>°</label>
+            <input id="thrFhaIdeal" type="range" min="5" max="20" value="10" step="0.5" style="width:220px">
           </div>
           <div>
             <label>FHA：Forward Head 閾値 <span id="vFhaFwd">20</span>°</label>
             <input id="thrFhaFwd" type="range" min="12" max="35" value="20" step="0.5" style="width:220px">
           </div>
           <div>
-            <label>大転子 中立幅 ±<span id="vHipNeutral">10</span> px</label>
-            <input id="thrHipNeutral" type="range" min="4" max="25" value="10" step="1" style="width:220px">
+            <label>大転子 中立幅 ±<span id="vHipNeutral">8</span> px</label>
+            <input id="thrHipNeutral" type="range" min="4" max="25" value="8" step="1" style="width:220px">
           </div>
           <div>
-            <label>大転子 前方＝+<span id="vHipFwd">10</span> px〜</label>
-            <input id="thrHipFwd" type="range" min="5" max="40" value="10" step="1" style="width:220px">
+            <label>大転子 前方＝+<span id="vHipFwd">12</span> px〜</label>
+            <input id="thrHipFwd" type="range" min="5" max="40" value="12" step="1" style="width:220px">
           </div>
           <div>
-            <label>大転子 後方＝<span id="vHipBwd">-10</span> px以下</label>
-            <input id="thrHipBwd" type="range" min="-40" max="-5" value="-10" step="1" style="width:220px">
+            <label>大転子 後方＝<span id="vHipBwd">-15</span> px以下</label>
+            <input id="thrHipBwd" type="range" min="-40" max="-5" value="-15" step="1" style="width:220px">
           </div>
           <div>
-            <label>膝：後方判定（補助）<span id="vKneeBack">-5</span> px以下</label>
-            <input id="thrKneeBack" type="range" min="-20" max="5" value="-5" step="1" style="width:220px">
+            <label>膝：後方判定（補助）<span id="vKneeBack">-2</span> px以下</label>
+            <input id="thrKneeBack" type="range" min="-20" max="5" value="-2" step="1" style="width:220px">
           </div>
           <div>
             <button id="thrReset" class="btn-secondary">Kendall目安に戻す</button>
@@ -106,7 +107,6 @@
         </div>
         <small>※pxは写真スケール依存。必要ならmm換算のスケール係数を適用してください。</small>
       </div>
-
     </div>
   </div>
 
@@ -122,7 +122,7 @@
       <details style="margin-top:6px">
         <summary><b>Plumb line（プラムライン）とは？</b></summary>
         <div id="plumbHelp" style="margin-top:6px">
-          Kendall の姿勢評価で使う「鉛直線」。側面観で、<u>外果（足関節の外側の骨）の少し前</u>を通る基準線です。この線に対して、耳・肩峰・大転子・膝・外果が前後どちらに位置するかで姿勢タイプを判定します。
+          Kendall の姿勢評価で使う「鉛直線」。側面観で、<u>外果（足関節外側の骨）の少し前</u>を通る基準線です。この線に対して、耳・肩峰・大転子・膝・外果が前後どちらに位置するかで姿勢タイプを判定します。
         </div>
       </details>
     </div>
@@ -134,9 +134,9 @@
   </div>
 </div>
 
-<!-- 必ずこの順番で読み込む -->
+<!-- 読み込み順はこの順番で -->
 <script src="./vendor/tf.min.js"></script>
 <script src="./vendor/pose-detection.min.js"></script>
-<script src="./script.js?v=clinicalA1"></script>
+<script src="./script.js?v=clinical_v2"></script>
 </body>
 </html>
