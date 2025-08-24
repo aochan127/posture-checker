@@ -1,5 +1,5 @@
-/* posture-checker all-in-one + FIT + 5-classes (2025-08-24)
-   ✅ iPhone対応/高DPR/EXIF回転補正
+/* posture-checker all-in-one + FIT + 5-classes + EXIF(paste) + Rotate (2025-08-24)
+   ✅ iPhone対応/高DPR/EXIF回転補正（アップロード/ドラッグ&ドロップ/ペースト）
    ✅ ドラッグ編集/Undo&Redo/拡大鏡（長押し）
    ✅ MoveNet自動抽出 + 左右サイドの妥当性スコア補強 + UIオーバーライド
    ✅ 外果±オフセット（膝×外果で前方符号自動）
@@ -8,11 +8,12 @@
    ✅ 画像アスペクト比維持（レターボックス表示）
    ✅ 軽量化：描画はrequestAnimationFrameで集約、resizeはデバウンス
    ✅ 分類：Ideal + Kypho-lordotic + Lordotic + Flat-back + Sway-back（計5区分）
+   ✅ 手動回転（左/右90°）ボタン（存在しなければ自動生成）
    依存: tf.min.js → pose-detection.min.js → script.js
    モデル: ./models/movenet/model.json
 */
 (() => {
-  console.log("posture-checker loaded v=fit3-5class");
+  console.log("posture-checker loaded v=full-rotate-20250824");
 
   // ===== DOM =====
   const canvas = document.getElementById('canvas');
@@ -329,7 +330,7 @@
     KNEE_BACK: -5
   };
 
-  // 追加の閾値（UIなしで内部固定）← NEW
+  // 追加の閾値（UIなしで内部固定）
   const EXTRA = {
     LORD_FHA_MAX: 18,   // Lordotic扱いする最大FHA（Kypho-lordoticよりは小さめ）
     KNEE_NEAR_BACK: -6  // 膝がほぼ中立（後方へ最大 -6px を許容）
@@ -505,11 +506,15 @@
     img.src = dataURL;
   }
 
-  // 任意の <input type="file">
+  // ===== 画像入力（ファイル選択 / D&D / ペースト） =====
   document.addEventListener('change',e=>{
-    const t=e.target; if (t?.type==='file'){ const f=t.files?.[0]; if(f) handleBlobWithExif(f); }
+    const t=e.target; if (t?.type==='file'){ const f=t.files?.[0]; if(f){
+      // JPEGはEXIF補正、それ以外は素直に読み込み
+      if (/image\/jpe?g/i.test(f.type)) handleBlobWithExif(f);
+      else blobToDataURL(f).then(handleDataURL);
+    }}
   },true);
-  // D&D
+
   function preventDefaults(e){ e.preventDefault(); e.stopPropagation(); }
   ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
     document.addEventListener(ev, preventDefaults, false);
@@ -517,34 +522,71 @@
   });
   document.addEventListener('drop', e=>{
     const f=[...(e.dataTransfer?.files||[])].find(x=>x.type.startsWith('image/'));
-    if (f) handleBlobWithExif(f);
-  });
-// 手動回転：現在の imgDataURL を±90°回して再読み込み
-async function rotateCurrentImage(dir){ // dir = +1 (右90°) or -1 (左90°)
-  if (!imgDataURL) { log("画像がありません"); return; }
-  const src = new Image();
-  src.onload = ()=>{
-    const w = src.naturalWidth || src.width;
-    const h = src.naturalHeight|| src.height;
-    const off = document.createElement('canvas');
-    off.width  = h;
-    off.height = w;
-    const octx = off.getContext('2d');
-    octx.save();
-    if (dir>0){ // 右90°
-      octx.translate(h,0);
-      octx.rotate(Math.PI/2);
-    }else{      // 左90°
-      octx.translate(0,w);
-      octx.rotate(-Math.PI/2);
+    if (f){
+      if (/image\/jpe?g/i.test(f.type)) handleBlobWithExif(f);
+      else blobToDataURL(f).then(handleDataURL);
     }
-    octx.drawImage(src,0,0);
-    octx.restore();
-    handleDataURL(off.toDataURL('image/jpeg',0.95));
-  };
-  src.onerror = ()=> log("回転用の画像ロードに失敗しました");
-  src.src = imgDataURL;
-}
+  });
+
+  // ★ ペーストもJPEGならEXIF補正に変更
+  document.addEventListener('paste', e=>{
+    const items=e.clipboardData?.items||[];
+    for (const it of items){
+      if (!it.type?.startsWith('image/')) continue;
+      const b = it.getAsFile();
+      if (!b) continue;
+      if (/image\/jpe?g/i.test(b.type)) {
+        handleBlobWithExif(b);
+      } else {
+        blobToDataURL(b).then(handleDataURL);
+      }
+      return;
+    }
+  });
+
+  // ===== 手動回転（UIが無ければ自動生成） =====
+  async function rotateCurrentImage(dir){ // dir = +1 (右90°) or -1 (左90°)
+    if (!imgDataURL) { log("画像がありません"); return; }
+    const src = new Image();
+    src.onload = ()=>{
+      const w = src.naturalWidth || src.width;
+      const h = src.naturalHeight|| src.height;
+      const off = document.createElement('canvas');
+      off.width  = h;
+      off.height = w;
+      const octx = off.getContext('2d');
+      octx.save();
+      if (dir>0){ // 右90°
+        octx.translate(h,0);
+        octx.rotate(Math.PI/2);
+      }else{      // 左90°
+        octx.translate(0,w);
+        octx.rotate(-Math.PI/2);
+      }
+      octx.drawImage(src,0,0);
+      octx.restore();
+      handleDataURL(off.toDataURL('image/jpeg',0.95));
+      log(`画像を${dir>0?'右':'左'}90°回転しました。`);
+    };
+    src.onerror = ()=> log("回転用の画像ロードに失敗しました");
+    src.src = imgDataURL;
+  }
+  // ボタンが無ければ簡易ボタンを自動生成
+  (function ensureRotateButtons(){
+    const l = document.getElementById('rotateL');
+    const r = document.getElementById('rotateR');
+    if (l && r) return;
+    const wrap = document.createElement('div');
+    wrap.style.display='flex'; wrap.style.gap='6px'; wrap.style.margin='6px 0';
+    const bl = document.createElement('button'); bl.id='rotateL'; bl.textContent='⟲ 左90°';
+    const br = document.createElement('button'); br.id='rotateR'; br.textContent='⟳ 右90°';
+    wrap.appendChild(bl); wrap.appendChild(br);
+    // 置き場所：canvasの直前 or body先頭
+    const parent = canvas?.parentElement || document.body;
+    parent.insertBefore(wrap, canvas);
+  })();
+  document.getElementById('rotateL')?.addEventListener('click', ()=>rotateCurrentImage(-1));
+  document.getElementById('rotateR')?.addEventListener('click', ()=>rotateCurrentImage(+1));
 
   // ===== 手動プロット & ドラッグ =====
   document.querySelectorAll('input[name="lm"]').forEach(r=>{
@@ -822,7 +864,4 @@ async function rotateCurrentImage(dir){ // dir = +1 (右90°) or -1 (左90°)
   setupCanvasDPR();
   updateImageFit();
   requestDraw();
-
-  // ===== ファイル入力ヘルパ（貼り直し時のため残し） =====
-  function readBlobToDataURL(blob){ return blobToDataURL(blob).then(handleDataURL); }
 })();
