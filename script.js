@@ -331,4 +331,33 @@
 
   // ---------- 初期描画 ----------
   draw();
+   // --- 強制クリック検知（ID違い/無効化に対応） ---
+(function ensureAIBind(){
+  // 1) クリックで常に拾う（#aiBtn か [data-ai-detect] にマッチしたら発火）
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#aiBtn, [data-ai-detect]');
+    if (!btn) return;
+    log('AIボタン押下を検知しました。自動抽出を開始します。');
+    runAutoDetect(); // ← 既存の関数を呼ぶ
+  });
+
+  // 2) 画像ロード後にAIボタンを有効化（ID違いでも data 属性で拾う）
+  function enableAIButtons(){
+    const b1 = document.getElementById('aiBtn');
+    if (b1) b1.disabled = false;
+    document.querySelectorAll('[data-ai-detect]').forEach(b => b.disabled = false);
+  }
+
+  // 画像onload時に enableAIButtons() を呼べるよう、既存の onload 後にも呼ぶ
+  const _handleDataURL = window.__handleDataURL__ || null;
+  // 既存コードで handleDataURL をローカルに持っている場合は以下で直接呼び出す
+  // ここでは毎秒チェックしてボタンがあれば有効化（安全策）
+  let tries = 0;
+  const t = setInterval(() => {
+    enableAIButtons();
+    tries++;
+    if (tries > 5) clearInterval(t);
+  }, 800);
+})();
+
 })();
