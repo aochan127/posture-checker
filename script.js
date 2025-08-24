@@ -100,7 +100,7 @@
     classDiv.innerHTML = `<p><b>${type}</b></p>`;
   }
 
-  // ==== v3bの画像読み込み（FileReader → img.onload） ====
+  // ==== v3bの画像読み込み ====
   fileInput.addEventListener('change', e => {
     const f = e.target.files[0];
     if (!f){ log("⚠️ ファイル未選択"); return; }
@@ -121,7 +121,7 @@
     r.readAsDataURL(f);
   });
 
-  // Canvas click -> set selected landmark
+  // キャンバスクリックでランドマーク修正
   canvas.addEventListener('click', e => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -158,30 +158,62 @@
     log("リセットしました。");
   });
 
-  // ===== AI（最小追加）：必要時のみ動的ロード。失敗しても警告だけ出す =====
-  let detector=null, tf=null, posedetection=null;
-  async function ensureDetector(){
+  // ====== UMDベースのAIロード（複数CDNフォールバック） ======
+  let detector=null;
+  async function loadScriptSeq(urls, globalCheck){
+    for (const url of urls){
+      try{
+        await new Promise((resolve, reject)=>{
+          const s=document.createElement('script');
+          s.src=url; s.async=true; s.crossOrigin='anonymous';
+          s.onload=()=> resolve();
+          s.onerror=()=> reject(new Error('script load error'));
+          document.head.appendChild(s);
+        });
+        if (globalCheck()) { log('ロード成功: '+url); return true; }
+      }catch(e){ log('ロード失敗: '+url); }
+    }
+    return false;
+  }
+
+  async function ensureDetectorUMD(){
     if(detector) return detector;
+    // tfjs (単一バンドル)
+    const tfUrls = [
+      'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js',
+      'https://unpkg.com/@tensorflow/tfjs@4.17.0/dist/tf.min.js'
+    ];
+    const poseUrls = [
+      'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@4.1.0/dist/pose-detection.min.js',
+      'https://unpkg.com/@tensorflow-models/pose-detection@4.1.0/dist/pose-detection.min.js'
+    ];
+    const okTf = await loadScriptSeq(tfUrls, ()=> !!window.tf);
+    if(!okTf){ log('⚠️ tfjsの読み込みに失敗（CDNブロックの可能性）'); return null; }
+    const okPose = await loadScriptSeq(poseUrls, ()=> !!window.poseDetection);
+    if(!okPose){ log('⚠️ pose-detectionの読み込みに失敗'); return null; }
     try{
-      tf = await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.17.0/dist/tf-core.esm.js');
-      await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.17.0/dist/tf-backend-webgl.esm.js');
-      await import('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.17.0/dist/tf-converter.esm.js');
-      posedetection = await import('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@4.1.0/dist/pose-detection.esm.js');
-      await tf.setBackend('webgl'); await tf.ready(); log('TensorFlow.js backend: '+tf.getBackend());
-      detector = await posedetection.createDetector(posedetection.SupportedModels.MoveNet, { modelType: 'Lightning' });
-      log('MoveNet detector 初期化完了。');
+      await tf.setBackend('webgl'); await tf.ready();
+      log('TensorFlow.js backend: '+tf.getBackend());
+      detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, { modelType: 'Lightning' });
+      log('MoveNet detector 初期化完了（UMD）。');
       return detector;
     }catch(e){
-      log('⚠️ AIライブラリ読み込み失敗（院内ネットワークでCDNブロックの可能性）：'+e.message);
+      log('⚠️ Detector初期化エラー: '+e.message);
       return null;
     }
   }
-  function sideByScore(kps){ const map=Object.fromEntries(kps.map(k=>[k.name,k])); const ls=['left_ear','left_shoulder','left_hip','left_knee','left_ankle'].reduce((s,n)=>s+(map[n]?.score||0),0); const rs=['right_ear','right_shoulder','right_hip','right_knee','right_ankle'].reduce((s,n)=>s+(map[n]?.score||0),0); return (ls>=rs)?'left':'right'; }
+
+  function sideByScore(kps){
+    const map=Object.fromEntries(kps.map(k=>[k.name,k]));
+    const ls=['left_ear','left_shoulder','left_hip','left_knee','left_ankle'].reduce((s,n)=>s+(map[n]?.score||0),0);
+    const rs=['right_ear','right_shoulder','right_hip','right_knee','right_ankle'].reduce((s,n)=>s+(map[n]?.score||0),0);
+    return (ls>=rs)?'left':'right';
+  }
 
   async function runAIDetect(){
     try{
       if(!imgLoaded){ log("⚠️ 先に画像を読み込んでください。"); return; }
-      const det = await ensureDetector(); if(!det) return;
+      const det = await ensureDetectorUMD(); if(!det) return;
       const off=document.createElement('canvas'); off.width=canvas.width; off.height=canvas.height;
       const octx=off.getContext('2d'); octx.drawImage(img,0,0,off.width,off.height);
       const poses = await det.estimatePoses(off,{flipHorizontal:false});
@@ -196,7 +228,5 @@
   }
 
   aiBtn.addEventListener('click', runAIDetect);
-
-  // init
   draw();
 })();
