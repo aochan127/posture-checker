@@ -1,143 +1,203 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Kendall Posture Checker — 5分類・診断版</title>
-<style>
-  :root{--ink:#0f172a;--muted:#475569;--line:#e2e8f0;--card:#fff;--accent:#2563eb}
-  body{font-family:system-ui,-apple-system,Segoe UI,Noto Sans JP,sans-serif;margin:0;padding:16px;background:#f8fafc;color:var(--ink)}
-  h2{margin:0 0 12px}
-  .row{display:flex;gap:16px;flex-wrap:wrap}
-  .col{flex:1 1 360px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
-  .controls label{display:block;margin:.35rem 0 .2rem}
-  .btn{padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
-  .btn-primary{background:var(--accent);color:#fff}
-  .btn-ghost{background:#e2e8f0;color:var(--ink)}
-  #canvas{display:block;width:100%;height:auto;background:#fff;touch-action:none}
-  #log{width:100%;min-height:160px}
-  small{color:var(--muted)}
-  .kv{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  footer{margin-top:12px;color:var(--muted);font-size:.85rem}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Kendall Posture Checker</title>
+  <style>
+    :root{ --panel-w: 340px; }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; font-family: system-ui, -apple-system, "Segoe UI",
+      "Noto Sans JP", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color:#0f172a; background:#f8fafc;
+    }
+    header{
+      padding:10px 14px; background:#0ea5e9; color:#fff;
+      position:sticky; top:0; z-index:10;
+    }
+    header h1{ font-size:18px; margin:0; }
+    main{ display:flex; gap:14px; padding:14px; }
+    #left, #right{ background:#fff; border:1px solid #e5e7eb; border-radius:10px; }
+    #left{ flex:1; min-width:0; padding:10px; display:flex; flex-direction:column; gap:8px; }
+    #right{ width:var(--panel-w); padding:12px; }
+    .row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .row > * { flex:0 0 auto; }
+    .grow{ flex:1; }
+    label{ font-size:13px; color:#334155; }
+    input[type="number"], input[type="text"], select, button{
+      font-size:14px; padding:6px 8px; border:1px solid #cbd5e1; border-radius:8px; background:#fff;
+    }
+    button{ cursor:pointer; }
+    button.primary{ background:#0ea5e9; color:#fff; border-color:#0284c7; }
+    button.ghost{ background:#f1f5f9; }
+    #canvasWrap{ position:relative; border:1px dashed #cbd5e1; border-radius:10px; overflow:hidden; background:#fff; }
+    canvas{ display:block; width:100%; height:calc(100dvh - 210px); max-height:900px; background:#000; }
+    .section{ border-top:1px solid #e5e7eb; margin-top:10px; padding-top:10px; }
+    .badges span{
+      display:inline-block; background:#eef2ff; color:#3730a3; font-size:12px;
+      padding:2px 8px; border-radius:999px; margin-right:6px; margin-bottom:6px;
+    }
+    #metrics p, #classification p, #classDef{ margin:6px 0; font-size:14px; }
+    textarea#log{
+      width:100%; height:140px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size:12px; border-radius:8px; border:1px solid #e5e7eb; padding:8px; background:#f8fafc;
+    }
+    .lm-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+    .lm-grid label{ display:flex; gap:6px; align-items:center; justify-content:center; border:1px solid #e5e7eb; border-radius:8px; padding:6px; }
+    .legend{ display:flex; gap:8px; flex-wrap:wrap; font-size:12px; }
+    .dot{ width:12px; height:12px; border-radius:50%; display:inline-block; vertical-align:middle; margin-right:4px; }
+    .c1{ background:#ef4444; } .c2{ background:#f59e0b; } .c3{ background:#eab308; }
+    .c4{ background:#3b82f6; } .c5{ background:#10b981; }
+    @media (max-width: 980px){
+      main{ flex-direction:column; }
+      #right{ width:100%; }
+      canvas{ height:60dvh; }
+    }
+  </style>
 </head>
 <body>
+  <header>
+    <h1>Kendall Posture Checker（5区分＋AI）</h1>
+  </header>
 
-<h2>Kendall Posture Checker — 5分類（Ideal / Kyphotic / Lordotic / Flat-back / Sway-back）</h2>
-
-<div class="row">
-  <div class="col">
-    <div class="card">
-      <div class="controls">
-        <label><b>画像を読み込む</b></label>
-        <input id="fileInput" type="file" accept="image/*">
-        <small>※ドラッグ＆ドロップ／ペーストでもOK</small>
-      </div>
-
-      <div class="controls" style="margin-top:8px">
-        <label><b>ランドマーク編集（タップで修正）</b></label>
-        <label><input type="radio" name="lm" value="0" checked> ①耳（赤）</label>
-        <label><input type="radio" name="lm" value="1"> ②肩（橙）</label>
-        <label><input type="radio" name="lm" value="2"> ③大転子（黄）</label>
-        <label><input type="radio" name="lm" value="3"> ④膝（青）</label>
-        <label><input type="radio" name="lm" value="4"> ⑤外果（緑）</label>
-      </div>
-
-      <div class="controls" style="margin-top:8px">
-        <label><b>側の選択（AI）</b></label>
-        <select id="sideSelect">
-          <option value="auto">自動</option>
-          <option value="left">左側</option>
-          <option value="right">右側</option>
+  <main>
+    <!-- 左：キャンバス＆操作 -->
+    <section id="left">
+      <!-- ファイル入力行 -->
+      <div class="row">
+        <input id="fileInput" type="file" accept="image/*" />
+        <button id="aiBtn" class="primary" disabled data-ai-detect>AI自動抽出</button>
+        <button id="clearBtn" class="ghost">リセット</button>
+        <select id="sideSelect" title="サイド選択">
+          <option value="auto" selected>サイド自動</option>
+          <option value="left">左側面</option>
+          <option value="right">右側面</option>
         </select>
       </div>
 
-      <div class="controls kv" style="margin-top:8px">
-        <button id="aiBtn" class="btn btn-primary" data-ai-detect disabled>AIで自動抽出</button>
-        <button id="clearBtn" class="btn btn-ghost">リセット</button>
+      <!-- 回転ボタン（script側でも自動生成されます） -->
+      <div class="row">
+        <button id="rotateL" class="ghost">⟲ 左90°</button>
+        <button id="rotateR" class="ghost">⟳ 右90°</button>
+        <span style="font-size:12px;color:#64748b;">※横向き画像は回転で調整</span>
       </div>
 
-      <!-- === 外果基準ライン === -->
-      <div class="card" style="margin-top:8px">
-        <div class="kv">
-          <label>鉛直線X：
-            <input id="plumbX" type="number" value="0" style="width:90px">
-          </label>
-          <button id="centerPlumbBtn" class="btn btn-ghost">中央に線</button>
-          <label><input id="togglePlumb" type="checkbox" checked> 線を表示</label>
+      <!-- ランドマーク選択 -->
+      <div class="row legend">
+        <div><span class="dot c1"></span>①耳</div>
+        <div><span class="dot c2"></span>②肩峰</div>
+        <div><span class="dot c3"></span>③大転子</div>
+        <div><span class="dot c4"></span>④膝</div>
+        <div><span class="dot c5"></span>⑤外果</div>
+      </div>
+      <div class="lm-grid">
+        <label><input type="radio" name="lm" value="0" checked>①</label>
+        <label><input type="radio" name="lm" value="1">②</label>
+        <label><input type="radio" name="lm" value="2">③</label>
+        <label><input type="radio" name="lm" value="3">④</label>
+        <label><input type="radio" name="lm" value="4">⑤</label>
+      </div>
+
+      <!-- プラムライン -->
+      <div class="row section">
+        <label>鉛直線 x:</label>
+        <input id="plumbX" type="number" style="width:90px" value="0" />
+        <button id="centerPlumbBtn" class="ghost">中央へ</button>
+        <label><input id="togglePlumb" type="checkbox" checked> 表示</label>
+      </div>
+      <div class="row">
+        <label>外果からのオフセット(px):</label>
+        <input id="plumbOffset" type="number" style="width:90px" value="10" />
+        <button id="plumbAtAnkleBtn" class="ghost">外果基準で線を置く</button>
+      </div>
+
+      <!-- キャンバス -->
+      <div id="canvasWrap">
+        <canvas id="canvas"></canvas>
+      </div>
+
+      <!-- Undo/Redo -->
+      <div class="row">
+        <button id="undoBtn" class="ghost">Undo</button>
+        <button id="redoBtn" class="ghost">Redo</button>
+      </div>
+
+      <!-- ログ -->
+      <div class="section">
+        <label>ログ</label>
+        <textarea id="log" readonly></textarea>
+      </div>
+    </section>
+
+    <!-- 右：結果＆しきい値 -->
+    <aside id="right">
+      <div class="section" style="border-top:none;margin-top:0;padding-top:0;">
+        <h3 style="margin:0 0 8px 0; font-size:16px;">判定</h3>
+        <div id="classification"></div>
+        <div id="classDef" style="font-size:13px;color:#475569;"></div>
+      </div>
+
+      <div class="section">
+        <h3 style="margin:0 0 8px 0; font-size:16px;">計測</h3>
+        <div id="metrics"></div>
+      </div>
+
+      <div class="section">
+        <h3 style="margin:0 0 8px 0; font-size:16px;">mm換算（任意）</h3>
+        <div class="row">
+          <label class="grow">身長（cm）→画像身長(px）</label>
+          <input id="scaleHeightCm" type="number" placeholder="例: 170" style="width:90px" />
+          <input id="scaleBodyPix" type="number" placeholder="例: 1280" style="width:110px" />
         </div>
-        <div class="kv" style="margin-top:8px">
-          <button id="plumbAtAnkleBtn" class="btn btn-ghost">外果に鉛直線を合わせる</button>
-          <label style="display:flex;gap:6px;align-items:center">
-            前方オフセット
-            <input id="plumbOffset" type="number" min="-50" max="100" value="12" style="width:80px">
-            <span>px</span>
-          </label>
-          <small>※Kendall：外果の“やや前方”に鉛直線（既定 +12px）</small>
+        <div class="row">
+          <label class="grow">物差し：ピクセルとmm</label>
+          <input id="scaleRefPx" type="number" placeholder="px" style="width:90px" />
+          <input id="scaleRefMm" type="number" placeholder="mm" style="width:90px" />
         </div>
       </div>
 
-      <!-- === しきい値 === -->
-      <div class="card" style="margin-top:8px">
-        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end">
-          <div>
-            <label>Ideal FHA 上限 <span id="vFhaIdeal">10</span>°</label>
-            <input id="thrFhaIdeal" type="range" min="5" max="20" value="10" step="0.5" style="width:220px">
-          </div>
-          <div>
-            <label>大転子 中立幅 ±<span id="vHipNeutral">8</span> px</label>
-            <input id="thrHipNeutral" type="range" min="4" max="25" value="8" step="1" style="width:220px">
-          </div>
-          <div>
-            <label>大転子 前方＝+<span id="vHipFwd">10</span> px〜</label>
-            <input id="thrHipFwd" type="range" min="6" max="40" value="10" step="1" style="width:220px">
-          </div>
-          <div>
-            <label>大転子 後方＝<span id="vHipBwd">-15</span> px以下</label>
-            <input id="thrHipBwd" type="range" min="-40" max="-5" value="-15" step="1" style="width:220px">
-          </div>
-          <div>
-            <label>膝：後方判定 <span id="vKneeBack">-2</span> px以下</label>
-            <input id="thrKneeBack" type="range" min="-20" max="5" value="-2" step="1" style="width:220px">
-          </div>
-          <div>
-            <button id="thrReset" class="btn btn-ghost">推奨値に戻す</button>
-          </div>
+      <div class="section">
+        <h3 style="margin:0 0 8px 0; font-size:16px;">しきい値（臨床調整）</h3>
+        <div style="font-size:12px;color:#64748b;margin-bottom:6px;">※下記は初期値のままでOK。必要なら調整</div>
+        <div class="row">
+          <label class="grow">Ideal FHA ≤ <span id="vFhaIdeal">12</span>°</label>
+          <input id="thrFhaIdeal" type="range" min="4" max="25" step="1" value="12" class="grow">
+        </div>
+        <div class="row">
+          <label class="grow">Kypho-Lordotic FHA &gt; <span id="vFhaFwd">20</span>°</label>
+          <input id="thrFhaFwd" type="range" min="10" max="40" step="1" value="20" class="grow">
+        </div>
+        <div class="row">
+          <label class="grow">大転子 中立±<span id="vHipNeutral">10</span> px</label>
+          <input id="thrHipNeutral" type="range" min="2" max="30" step="1" value="10" class="grow">
+        </div>
+        <div class="row">
+          <label class="grow">大転子 前方 ≥ <span id="vHipFwd">10</span> px</label>
+          <input id="thrHipFwd" type="range" min="4" max="40" step="1" value="10" class="grow">
+        </div>
+        <div class="row">
+          <label class="grow">大転子 後方 ≤ <span id="vHipBwd">-10</span> px</label>
+          <input id="thrHipBwd" type="range" min="-40" max="-4" step="1" value="-10" class="grow">
+        </div>
+        <div class="row">
+          <label class="grow">膝 後方 ≤ <span id="vKneeBack">-5</span> px</label>
+          <input id="thrKneeBack" type="range" min="-30" max="0" step="1" value="-5" class="grow">
+        </div>
+        <div class="row">
+          <button id="thrReset" class="ghost">既定に戻す</button>
+        </div>
+        <div class="badges">
+          <span>Ideal</span><span>Kypho-lordotic</span><span>Lordotic</span><span>Flat-back</span><span>Sway-back</span>
         </div>
       </div>
-    </div>
-  </div>
+    </aside>
+  </main>
 
-  <div class="col">
-    <div class="card">
-      <canvas id="canvas" width="960" height="720"></canvas>
-    </div>
-
-    <div class="card" style="margin-top:8px">
-      <div id="metrics"></div>
-      <div id="classification" style="margin-top:4px;font-weight:bold"></div>
-      <div id="classDef" style="font-size:0.95rem; line-height:1.6; margin-top:4px"></div>
-      <details style="margin-top:6px">
-        <summary><b>Plumb line（プラムライン）とは？</b></summary>
-        <div style="margin-top:6px">
-          Kendall の姿勢評価で使う「鉛直線」。側面観で、<u>外果（足関節外側の骨）の少し前</u>を通る基準線です。
-        </div>
-      </details>
-    </div>
-
-    <div class="card" style="margin-top:8px">
-      <label><b>ログ</b></label>
-      <textarea id="log" readonly></textarea>
-    </div>
-
-    <footer>build: five_types_diag v2</footer>
-  </div>
-</div>
-
-<!-- 読み込み順はこの順番で -->
-<script src="./vendor/tf.min.js"></script>
-<script src="./vendor/pose-detection.min.js"></script>
-<script src="./script.js?v=five_types_diag_v2"></script>
+  <!-- ライブラリ -->
+  <script src="vendor/tf.min.js"></script>
+  <script src="vendor/pose-detection.min.js"></script>
+  <!-- アプリ本体（最新差し替え版。キャッシュ回避に ?v= を更新） -->
+  <script src="script.js?v=rotatefix"></script>
 </body>
 </html>
