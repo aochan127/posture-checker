@@ -78,6 +78,17 @@
   <script src="./vendor/tf.min.js"></script>
 　<script src="./vendor/pose-detection.min.js"></script>
 　<script src="./script.js"></script>
+<!-- ===== AIライブラリ（順番厳守：tf -> pose-detection -> 自作script） ===== -->
+<script src="./vendor/tf.min.js"></script>
+<script src="./vendor/pose-detection.min.js"></script>
+
+<!-- ロード確認（デバッグ用）。コンソールにも出ます -->
+<script>
+  console.log('tf on window =', typeof window.tf);
+  console.log('poseDetection on window =', typeof window.poseDetection);
+</script>
+
+<script src="./script.js?v=fix6"></script>
 
 </body>
 </html>
