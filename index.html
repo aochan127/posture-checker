@@ -3,22 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ケンダル姿勢セルフチェック v3b（スタンドアロン骨組み）</title>
+  <title>ケンダル姿勢セルフチェック v3b（iPhone読込強化）</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
-    <h1>ケンダル姿勢セルフチェック v3b（スタンドアロン骨組み）</h1>
-    <p>画像表示はv3b方式（安定）。AIは <b>ローカル同梱</b> のライブラリとモデルを使用します（CDN不要）。</p>
+    <h1>ケンダル姿勢セルフチェック v3b（iPhone読込強化）</h1>
+    <p>画像表示はv3b方式。<b>iPhone向けに通常のファイル入力欄</b>も追加（ボタンが反応しない場合はこちらを使用）。</p>
   </header>
 
   <main>
     <section class="controls">
       <div class="file-controls">
         <label class="btn">
-          画像を読み込む
-          <input id="fileInput" type="file" accept="image/*" hidden />
+          画像を読み込む（ボタン）
+          <input id="fileInputBtn" type="file" accept="image/*;capture=environment" hidden />
         </label>
+        <input id="fileInputPlain" type="file" accept="image/*" />
         <button id="aiBtn" class="btn-primary" disabled>AIで自動抽出</button>
         <button id="clearBtn" class="btn-secondary">リセット</button>
       </div>
@@ -55,6 +56,10 @@
     <section class="canvas-wrap">
       <div class="canvas-col">
         <canvas id="canvas" width="720" height="960"></canvas>
+        <div class="preview-wrap">
+          <h4>生（raw）プレビュー &lt;img&gt;</h4>
+          <img id="rawPreview" alt="読み込んだ画像プレビュー" />
+        </div>
       </div>
       <aside class="results">
         <h3>結果</h3>
@@ -62,7 +67,7 @@
         <div id="classification" class="classification"></div>
         <details open>
           <summary>診断・ログ</summary>
-          <pre id="log" class="logbox">読み込み完了。画像を選択してください。</pre>
+          <pre id="log" class="logbox">起動しました。画像を選択してください。</pre>
         </details>
       </aside>
     </section>
@@ -70,9 +75,6 @@
 
   <footer><p>© 2025 AORC / Posture Checker</p></footer>
 
-  <!-- ▼ ローカル同梱スクリプトを読み込み（CDN不要）-->
-  <script src="./vendor/tf.min.js"></script>
-  <script src="./vendor/pose-detection.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
