@@ -192,6 +192,41 @@
         </div>
       </div>
     </aside>
+    <!-- 分類ロジック（数値化） -->
+<div class="section">
+  <h3 style="margin:0 0 8px 0; font-size:16px;">分類ロジック（数値化）</h3>
+
+  <p style="font-size:13px;color:#475569;margin:6px 0 10px;">
+    このアプリは<strong>最も近い1分類</strong>だけを表示します。下のルールを
+    <strong>上から順に</strong>チェックし、最初に当てはまった型を採用します。
+    （単位：角度＝度、距離＝ピクセル）
+  </p>
+
+  <ul style="padding-left:18px; margin:0 0 10px 0; line-height:1.6;">
+    <li><b>Ideal</b>：
+      <code>FHA ≤ 12°</code> かつ <code>|Hip| ≤ 10px</code>（膝は中立〜やや前方）
+    </li>
+    <li><b>Kyphotic-lordotic</b>：
+      <code>FHA &gt; 20°</code> かつ <code>Hip ≥ +10px</code>
+    </li>
+    <li><b>Lordotic</b>：
+      <code>FHA ≤ 18°</code> かつ <code>Hip ≥ +10px</code> かつ <code>Knee ≥ −6px</code>
+    </li>
+    <li><b>Sway-back</b>：
+      <code>Hip ≤ −10px</code> かつ <code>Knee ≤ −5px</code>
+    </li>
+    <li><b>Flat-back</b>：
+      <code>FHA &lt; 10°</code> かつ <code>Hip &lt; +10px</code>
+    </li>
+  </ul>
+
+  <div style="font-size:12px;color:#64748b; margin-top:10px;">
+    <div><b>FHA</b>：耳珠–肩峰の線と鉛直線のなす角（前方頭位の指標）</div>
+    <div><b>Hip</b>：大転子の鉛直線（外果基準プラムライン）からの水平距離。<code>+</code>＝前方、<code>−</code>＝後方</div>
+    <div><b>Knee</b>：膝外側中心の鉛直線からの水平距離。<code>+</code>＝前方、<code>−</code>＝後方</div>
+    <div>※右の「しきい値」スライダーを変更しても判定ロジックは同じですが、数値境界を臨床的に調整できます。</div>
+  </div>
+</div>
   </main>
 
   <!-- ライブラリ -->
