@@ -1,53 +1,46 @@
-/* Kendall Posture Checker — 5分類版（Ideal / Kyphotic / Lordotic / Flat-back / Sway-back）
-   - 画像読込：<input> / D&D / ペースト
-   - iPhoneタップ補正：offsetX優先
-   - Plumb line：外果＋前方オフセット（既定 +12px）
-   - MoveNet + 輪郭スナップ(A方式)で大転子控えめ補正
-   - 5分類ロジック実装（Kyphotic / Lordotic を分離）
+/* Kendall Posture Checker — 5分類・診断版 v2
+   画像読込まわりを堅牢化＆詳細ログ追加
 */
 
 (() => {
   // ---------- DOM ----------
-  const canvas = document.getElementById('canvas');
+  const $ = s => document.querySelector(s);
+  const canvas = $('#canvas');
   const ctx = canvas.getContext('2d');
-  const fileInput = document.getElementById('fileInput');
 
-  const aiBtn = document.getElementById('aiBtn');
-  const clearBtn = document.getElementById('clearBtn');
-  const sideSelect = document.getElementById('sideSelect');
+  const fileInput = $('#fileInput');
+  const aiBtn = $('#aiBtn');
+  const clearBtn = $('#clearBtn');
+  const sideSelect = $('#sideSelect');
 
-  // Plumb line
-  const plumbXInput = document.getElementById('plumbX');
-  const centerPlumbBtn = document.getElementById('centerPlumbBtn');
-  const togglePlumb = document.getElementById('togglePlumb');
-  const plumbOffset     = document.getElementById('plumbOffset');
-  const plumbAtAnkleBtn = document.getElementById('plumbAtAnkleBtn');
+  const plumbXInput = $('#plumbX');
+  const centerPlumbBtn = $('#centerPlumbBtn');
+  const togglePlumb = $('#togglePlumb');
+  const plumbOffset = $('#plumbOffset');
+  const plumbAtAnkleBtn = $('#plumbAtAnkleBtn');
 
-  // Threshold UI
-  const thrFhaIdeal   = document.getElementById('thrFhaIdeal');
-  const thrHipNeutral = document.getElementById('thrHipNeutral');
-  const thrHipFwd     = document.getElementById('thrHipFwd');
-  const thrHipBwd     = document.getElementById('thrHipBwd');
-  const thrKneeBack   = document.getElementById('thrKneeBack');
-  const vFhaIdeal     = document.getElementById('vFhaIdeal');
-  const vHipNeutral   = document.getElementById('vHipNeutral');
-  const vHipFwd       = document.getElementById('vHipFwd');
-  const vHipBwd       = document.getElementById('vHipBwd');
-  const vKneeBack     = document.getElementById('vKneeBack');
-  const thrReset      = document.getElementById('thrReset');
+  const thrFhaIdeal = $('#thrFhaIdeal');
+  const thrHipNeutral = $('#thrHipNeutral');
+  const thrHipFwd = $('#thrHipFwd');
+  const thrHipBwd = $('#thrHipBwd');
+  const thrKneeBack = $('#thrKneeBack');
+  const vFhaIdeal = $('#vFhaIdeal');
+  const vHipNeutral = $('#vHipNeutral');
+  const vHipFwd = $('#vHipFwd');
+  const vHipBwd = $('#vHipBwd');
+  const vKneeBack = $('#vKneeBack');
+  const thrReset = $('#thrReset');
 
-  // Output
-  const metricsDiv = document.getElementById('metrics');
-  const classDiv   = document.getElementById('classification');
-  const classDefEl = document.getElementById('classDef');
-  const logEl      = document.getElementById('log');
+  const metricsDiv = $('#metrics');
+  const classDiv = $('#classification');
+  const classDefEl = $('#classDef');
+  const logEl = $('#log');
 
   // ---------- 状態 ----------
   let img = new Image();
   let imgLoaded = false;
   let imgDataURL = null;
-  // 0:耳 1:肩 2:大転子 3:膝 4:外果
-  let points = [null, null, null, null, null];
+  let points = [null,null,null,null,null]; // 耳 肩 大転子 膝 外果
   let currentEdit = 0;
   let plumbX = 0;
   let showPlumb = true;
@@ -56,29 +49,24 @@
   const COLORS = ["#ef4444","#f59e0b","#eab308","#3b82f6","#10b981"];
   const RADIUS = 14;
 
-  // ---- しきい値（推奨初期値：外来バランス） ----
+  // ---- しきい値 ----
   const THR = {
-    FHA_IDEAL_MAX: 10,  // Ideal のFHA上限
-    HIP_IDEAL_ABS: 8,   // 大転子の中立幅 ±px
-    HIP_FWD: 10,        // Lordotic / 前寄り判定の基準
-    HIP_BWD: -15,       // Sway-back：大転子が後方
-    KNEE_BACK: -2       // Sway-back：膝が後方
+    FHA_IDEAL_MAX: 10,
+    HIP_IDEAL_ABS: 8,
+    HIP_FWD: 10,
+    HIP_BWD: -15,
+    KNEE_BACK: -2
   };
-  // Kyphotic / Sway 調整
-  const FHA_KYPHOSIS_STRONG = 38; // これ以上はKyphotic最優先
-  const FHA_KYPHOSIS_MILD   = 20; // 中等度（前寄りサインあればKyphotic）
-  const FHA_SWAY_MAX        = 35; // これ以下ならSway-backを許容
-  const TORSO_BACK_REQ      = -6; // 体幹（肩）が骨盤より後
-  const TORSO_FRONT_HINT    = +6; // 体幹（肩）が骨盤より前
+  const FHA_KYPHOSIS_STRONG = 38;
+  const FHA_KYPHOSIS_MILD   = 20;
+  const FHA_SWAY_MAX        = 35;
+  const TORSO_BACK_REQ      = -6;
+  const TORSO_FRONT_HINT    = +6;
 
   // ---------- Utils ----------
   function log(msg){
-    if (!logEl) { console.log(msg); return; }
-    if ('value' in logEl) {
-      logEl.value += (logEl.value ? "\n" : "") + msg;
-      logEl.scrollTop = logEl.scrollHeight;
-    } else {
-      logEl.textContent += (logEl.textContent ? "\n" : "") + msg;
+    if (logEl) {
+      logEl.value = (logEl.value ? logEl.value + "\n" : "") + msg;
       logEl.scrollTop = logEl.scrollHeight;
     }
     console.log(msg);
@@ -154,18 +142,15 @@
     });
   }
 
-  // ---------- 分類（5分類） ----------
+  // ---------- 5分類 ----------
   function classify(FHA, hipOffsetPx, kneeOffsetPx, torsoShiftPx){
     const {FHA_IDEAL_MAX, HIP_IDEAL_ABS, HIP_FWD, HIP_BWD, KNEE_BACK} = THR;
 
-    // 1) Kyphotic（胸椎後弯過多）
     if (FHA >= FHA_KYPHOSIS_STRONG) return "Kyphotic";
     if (FHA >= FHA_KYPHOSIS_MILD && torsoShiftPx >= TORSO_FRONT_HINT) return "Kyphotic";
 
-    // 2) Ideal（先に拾う）
     if (Math.abs(hipOffsetPx) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX) return "Ideal";
 
-    // 3) Sway-back（骨盤後傾＋股関節伸展＋体幹後方）
     if (
       FHA <= FHA_SWAY_MAX &&
       hipOffsetPx <= HIP_BWD &&
@@ -173,13 +158,10 @@
       torsoShiftPx <= TORSO_BACK_REQ
     ) return "Sway-back";
 
-    // 4) Lordotic（腰椎前弯過多：骨盤前傾）
     if (hipOffsetPx >= HIP_FWD && FHA < FHA_KYPHOSIS_STRONG) return "Lordotic";
 
-    // 5) Flat-back（平背）
     if (FHA <= 10 && hipOffsetPx < HIP_FWD) return "Flat-back";
 
-    // タイブレーク
     if (torsoShiftPx >= (TORSO_FRONT_HINT+2)) return "Kyphotic";
     if (hipOffsetPx <= (HIP_BWD-3) && kneeOffsetPx <= (KNEE_BACK-2)) return "Sway-back";
     if (hipOffsetPx >= (HIP_FWD+3)) return "Lordotic";
@@ -196,13 +178,12 @@
     }
     const [ear,shoulder,hip,knee] = points;
 
-    // FHA ≈ 耳-肩の線の傾きからの近似
     const angleDeg = Math.atan2(ear.y-shoulder.y, ear.x-shoulder.x)*180/Math.PI;
     const FHA = Math.abs(90-Math.abs(angleDeg));
 
-    const hipOffsetPx  = hip.x  - plumbX;  // +前 / -後
-    const kneeOffsetPx = knee.x - plumbX;  // +前 / -後
-    const torsoShiftPx = shoulder.x - hip.x; // ＋肩が前 / －肩が後
+    const hipOffsetPx  = hip.x  - plumbX;
+    const kneeOffsetPx = knee.x - plumbX;
+    const torsoShiftPx = shoulder.x - hip.x;
 
     const type = classify(FHA, hipOffsetPx, kneeOffsetPx, torsoShiftPx);
 
@@ -214,11 +195,11 @@
     classDiv.textContent = type;
 
     const DEF = {
-      "Ideal"     : "耳・肩・大転子・膝が鉛直線近傍。胸椎後弯/腰椎前弯は正常範囲で骨盤中間位。",
-      "Kyphotic"  : "胸椎後弯↑。体幹が前方にシフトしやすく、頭部前方位を伴うことが多い。",
-      "Lordotic"  : "腰椎前弯↑・骨盤前傾。大転子が鉛直線より前方に位置しやすい。",
-      "Flat-back" : "胸腰椎カーブが平坦。骨盤後傾傾向でFHAは小さめ。",
-      "Sway-back" : "骨盤後傾＋股関節伸展＋体幹後方。ヒップ/膝が線より後方、肩も骨盤より後ろ。"
+      "Ideal"     : "耳・肩・大転子・膝が鉛直線近傍。",
+      "Kyphotic"  : "胸椎後弯↑（体幹前方/頭部前方）。",
+      "Lordotic"  : "腰椎前弯↑・骨盤前傾（ヒップ前方）。",
+      "Flat-back" : "胸腰椎カーブが平坦、骨盤後傾傾向。",
+      "Sway-back" : "骨盤後傾＋股関節伸展＋体幹後方。"
     };
     classDefEl.textContent = DEF[type] || "";
   }
@@ -265,28 +246,42 @@
   // ---------- 画像取り込み ----------
   function handleDataURL(dataURL){
     imgDataURL = dataURL;
+    log(`FileReader 結果: dataURL length=${dataURL.length}`);
     img.onload = ()=>{
       imgLoaded = true;
+      log(`画像 onload 完了: natural=${img.naturalWidth}x${img.naturalHeight}`);
       setupCanvasDPR();
       points = [null,null,null,null,null];
-      draw(); log("画像 onload 完了。");
+      aiBtn.disabled = false;
+      draw();
     };
     img.onerror = ()=> log("⚠️ 画像の読み込みに失敗しました（img.onerror）");
     img.src = dataURL;
   }
   function readBlobToDataURL(blob){
-    if (blob.type && !/^image\//i.test(blob.type)){ log(`⚠️ 画像ではありません（type=${blob.type}）`); return; }
+    if (blob.type && !/^image\//i.test(blob.type)){
+      log(`⚠️ 画像ではありません（type=${blob.type}）`);
+      return;
+    }
+    log(`FileReader 開始: ${blob.name||'(no name)'} size=${blob.size} type=${blob.type}`);
     const r = new FileReader();
     r.onload = ()=> { if (typeof r.result === 'string') handleDataURL(r.result); };
-    r.onerror = ()=> log("⚠️ 画像の読み込みに失敗しました（FileReader）");
+    r.onerror = ()=> log("⚠️ FileReader エラー（読み取り失敗）");
     r.readAsDataURL(blob);
   }
 
-  // <input>
+  // a) <input>
   fileInput?.addEventListener('change', e=>{
-    const f=e.target.files?.[0]; if (f) readBlobToDataURL(f);
+    const f=e.target.files?.[0];
+    if (f) readBlobToDataURL(f);
+    else log("⚠️ fileInput: ファイル未選択");
   });
-  // D&D
+  // b) ドキュメント全体の change（iOSの挙動対策）
+  document.addEventListener('change', e=>{
+    const t=e.target;
+    if (t && t.type==='file'){ const f=t.files?.[0]; if (f){ log("document.change 経由で拾いました"); readBlobToDataURL(f); } }
+  }, true);
+  // c) D&D
   function preventDefaults(e){ e.preventDefault(); e.stopPropagation(); }
   ['dragenter','dragover','dragleave','drop'].forEach(ev=>{
     document.addEventListener(ev, preventDefaults, false);
@@ -296,7 +291,7 @@
     const f=[...(e.dataTransfer?.files||[])].find(x=>x.type.startsWith('image/'));
     if (f) readBlobToDataURL(f);
   });
-  // paste
+  // d) ペースト
   document.addEventListener('paste', e=>{
     const items=e.clipboardData?.items||[];
     for (const it of items){
@@ -310,7 +305,7 @@
   });
   canvas.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
-    if (!imgLoaded) return;
+    if (!imgLoaded) { log("⚠️ まず画像を読み込んでください"); return; }
     const p=getCanvasPoint(e);
     points[currentEdit]=p;
     if (currentEdit===4) setPlumbFromAnkle();
@@ -321,6 +316,7 @@
   clearBtn?.addEventListener('click', ()=>{
     points=[null,null,null,null,null];
     imgLoaded=false; imgDataURL=null;
+    aiBtn.disabled=true;
     plumbX=0; plumbXInput.value=0;
     metricsDiv.innerHTML=""; classDiv.innerHTML=""; classDefEl.innerHTML="";
     draw(); log("リセットしました。");
@@ -338,7 +334,7 @@
     draw(); compute();
   });
 
-  // ---------- AI（MoveNet + 大転子スナップ） ----------
+  // ---------- AI（MoveNet） ----------
   function vendorsOK(){
     const ok = !!(window.tf && window.poseDetection);
     if (!window.tf) log("⚠️ tf.min.js が読み込まれていません（/vendor/tf.min.js）");
@@ -388,23 +384,23 @@
   }
   function estimateTrochanterByContour(imgData, hip, knee, side){
     const L=Math.hypot(knee.x-hip.x,knee.y-hip.y)||1;
-    let nx=(knee.y-hip.y)/L, ny=-(knee.x-hip.x)/L;  // 体外側向き
+    let nx=(knee.y-hip.y)/L, ny=-(knee.x-hip.x)/L;
     if (side==='left'){ nx=-nx; ny=-ny; }
     const rmin=Math.max(8,0.02*L);
-    const rmax=Math.min(40,0.14*L);  // 控えめ
+    const rmax=Math.min(40,0.14*L);
     let best={score:-1,x:hip.x,y:hip.y,r:0};
     for (let r=rmin;r<=rmax;r++){
       const x=Math.round(hip.x+nx*r), y=Math.round(hip.y+ny*r);
       const s=sobelMagnitude(imgData,x,y);
-      const score=s + 0.03*(r-rmin); // 外側ボーナス弱め
+      const score=s + 0.03*(r-rmin);
       if (score>best.score) best={score,x,y,r};
     }
-    if (!best || best.score<30 || best.r<0.02*L || best.r>0.2*L) return hip; // フォールバック
+    if (!best || best.score<30 || best.r<0.02*L || best.r>0.2*L) return hip;
     return {x:best.x,y:best.y};
   }
 
   async function runAutoDetect(){
-    if (!imgLoaded || !imgDataURL){ log("⚠️ 画像を先に読み込んでください。"); return; }
+    if (!imgLoaded || !imgDataURL){ log("⚠️ 先に画像を読み込んでください"); return; }
     const det = await ensureDetector(); if (!det) return;
 
     const tmp=new Image();
@@ -432,7 +428,6 @@
         const troC=estimateTrochanterByContour(imgData, hipC0, kneeC, side);
 
         points=[earC, shC, troC, kneeC, ankleC];
-
         setPlumbFromAnkle();
         draw(); compute(); log(`AI検出完了 side=${side}`);
       }catch(e){
@@ -443,20 +438,19 @@
     tmp.src=imgDataURL;
   }
 
-  // ---------- クリック系 ----------
+  // ---------- その他イベント ----------
   document.querySelectorAll('input[name="lm"]').forEach(r=>{
     r.addEventListener('change', ()=> currentEdit = Number(r.value||0));
   });
   canvas.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
-    if (!imgLoaded) return;
+    if (!imgLoaded) { log("⚠️ まず画像を読み込んでください"); return; }
     const p=getCanvasPoint(e);
     points[currentEdit]=p;
     if (currentEdit===4) setPlumbFromAnkle();
     draw(); compute();
   }, {passive:false});
 
-  // ---------- Plumbイベント ----------
   plumbAtAnkleBtn?.addEventListener('click',()=>setPlumbFromAnkle());
   plumbOffset?.addEventListener('change',()=>{ if(points[4]) setPlumbFromAnkle(); });
   plumbXInput?.addEventListener('change', ()=>{
@@ -474,18 +468,14 @@
     showPlumb=togglePlumb.checked; draw();
   });
 
-  // ---------- ボタン ----------
   aiBtn?.addEventListener('click', ()=>{ log("AIで自動抽出…"); runAutoDetect(); });
   clearBtn?.addEventListener('click', ()=>{
-    points=[null,null,null,null,null]; imgLoaded=false; imgDataURL=null;
+    points=[null,null,null,null,null];
+    imgLoaded=false; imgDataURL=null;
+    aiBtn.disabled=true;
     plumbX=0; plumbXInput.value=0;
     metricsDiv.innerHTML=""; classDiv.innerHTML=""; classDefEl.innerHTML="";
     draw(); log("リセットしました。");
-  });
-
-  // ---------- 画像入力イベント ----------
-  fileInput?.addEventListener('change', e=>{
-    const f=e.target.files?.[0]; if (f) readBlobToDataURL(f);
   });
 
   // ---------- 初期化 ----------
@@ -496,5 +486,4 @@
     log("起動しました。画像を選択してください。");
   }
   init();
-
 })();
