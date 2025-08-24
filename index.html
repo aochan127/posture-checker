@@ -1,94 +1,142 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ケンダル姿勢セルフチェック v3b（iPhone読込強化）</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kendall Posture Checker</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Noto Sans JP,sans-serif;margin:0;padding:16px;background:#f8fafc;color:#0f172a}
+  .row{display:flex;gap:16px;flex-wrap:wrap}
+  .col{flex:1 1 360px}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px}
+  .controls label{display:block;margin:.3rem 0 .2rem}
+  .btn-primary,.btn-secondary{padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
+  .btn-primary{background:#2563eb;color:#fff}
+  .btn-secondary{background:#e2e8f0;color:#0f172a}
+  #canvas{display:block;width:100%;height:auto;padding:0;border:0;box-sizing:content-box;touch-action:none;background:#fff}
+  #log{width:100%;min-height:120px}
+  small{color:#475569}
+</style>
 </head>
 <body>
-  <header>
-    <h1>ケンダル姿勢セルフチェック v3b（iPhone読込強化）</h1>
-    <p>画像表示はv3b方式。<b>iPhone向けに通常のファイル入力欄</b>も追加（ボタンが反応しない場合はこちらを使用）。</p>
-  </header>
 
-  <main>
-    <section class="controls">
-      <div class="file-controls">
-        <label class="btn">
-          画像を読み込む（ボタン）
-          <input id="fileInputBtn" type="file" accept="image/*;capture=environment" hidden />
-        </label>
-        <input id="fileInputPlain" type="file" accept="image/*" />
+<h2>Kendall Posture Checker</h2>
+
+<div class="row">
+  <div class="col">
+    <div class="card">
+      <div class="controls">
+        <label><b>画像を読み込む</b></label>
+        <input type="file" accept="image/*">
+        <small>※ドラッグ＆ドロップ／ペーストでもOK</small>
+      </div>
+      <div class="controls" style="margin-top:8px">
+        <label><b>ランドマーク編集（クリックで修正）</b></label>
+        <label><input type="radio" name="lm" value="0" checked> ①耳（赤）</label>
+        <label><input type="radio" name="lm" value="1"> ②肩（橙）</label>
+        <label><input type="radio" name="lm" value="2"> ③大転子（黄）</label>
+        <label><input type="radio" name="lm" value="3"> ④膝（青）</label>
+        <label><input type="radio" name="lm" value="4"> ⑤外果（緑）</label>
+      </div>
+
+      <div class="controls" style="margin-top:8px">
+        <label><b>側の選択（AI）</b></label>
+        <select id="sideSelect">
+          <option value="auto">自動</option>
+          <option value="left">左側</option>
+          <option value="right">右側</option>
+        </select>
+      </div>
+
+      <div class="controls" style="margin-top:8px">
         <button id="aiBtn" class="btn-primary" data-ai-detect>AIで自動抽出</button>
         <button id="clearBtn" class="btn-secondary">リセット</button>
       </div>
 
-      <div class="edit-controls">
-        <div class="group">
-          <label>鉛直線X: <input id="plumbX" type="number" min="0" value="0" /></label>
-          <button id="centerPlumbBtn" class="btn-secondary">中央に置く</button>
-          <label class="checkbox"><input type="checkbox" id="togglePlumb" checked> 鉛直線を表示</label>
+      <!-- === 外果基準ライン === -->
+      <div class="card" style="margin-top:8px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label>鉛直線X：
+            <input id="plumbX" type="number" value="0" style="width:90px">
+          </label>
+          <button id="centerPlumbBtn" class="btn-secondary">中央に線</button>
+          <label><input id="togglePlumb" type="checkbox" checked> 線を表示</label>
         </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <button id="plumbAtAnkleBtn" class="btn-secondary">外果に鉛直線を合わせる</button>
+          <label style="display:flex;gap:6px;align-items:center">
+            前方オフセット
+            <input id="plumbOffset" type="number" min="-50" max="100" value="10" style="width:80px">
+            <span>px</span>
+          </label>
+          <small>※Kendall：外果の“やや前方”に鉛直線（デフォルト +10px）</small>
+        </div>
+      </div>
 
-        <div class="group">
-          <label>ランドマーク選択：</label>
-          <div class="lm-picker">
-            <label><input type="radio" name="lm" value="0" checked> ①耳</label>
-            <label><input type="radio" name="lm" value="1"> ②肩</label>
-            <label><input type="radio" name="lm" value="2"> ③大転子</label>
-            <label><input type="radio" name="lm" value="3"> ④膝</label>
-            <label><input type="radio" name="lm" value="4"> ⑤外果</label>
+      <!-- === 臨床しきい値 === -->
+      <div class="card" style="margin-top:8px">
+        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end">
+          <div>
+            <label>FHA：Ideal上限 <span id="vFhaIdeal">12</span>°</label>
+            <input id="thrFhaIdeal" type="range" min="5" max="20" value="12" step="0.5" style="width:220px">
+          </div>
+          <div>
+            <label>FHA：Forward Head 閾値 <span id="vFhaFwd">20</span>°</label>
+            <input id="thrFhaFwd" type="range" min="12" max="35" value="20" step="0.5" style="width:220px">
+          </div>
+          <div>
+            <label>大転子 中立幅 ±<span id="vHipNeutral">10</span> px</label>
+            <input id="thrHipNeutral" type="range" min="4" max="25" value="10" step="1" style="width:220px">
+          </div>
+          <div>
+            <label>大転子 前方＝+<span id="vHipFwd">10</span> px〜</label>
+            <input id="thrHipFwd" type="range" min="5" max="40" value="10" step="1" style="width:220px">
+          </div>
+          <div>
+            <label>大転子 後方＝<span id="vHipBwd">-10</span> px以下</label>
+            <input id="thrHipBwd" type="range" min="-40" max="-5" value="-10" step="1" style="width:220px">
+          </div>
+          <div>
+            <label>膝：後方判定（補助）<span id="vKneeBack">-5</span> px以下</label>
+            <input id="thrKneeBack" type="range" min="-20" max="5" value="-5" step="1" style="width:220px">
+          </div>
+          <div>
+            <button id="thrReset" class="btn-secondary">Kendall目安に戻す</button>
           </div>
         </div>
-
-        <div class="group">
-          <label>検出サイド：</label>
-          <select id="sideSelect">
-            <option value="auto" selected>自動</option>
-            <option value="left">左側</option>
-            <option value="right">右側</option>
-          </select>
-        </div>
+        <small>※pxは写真スケール依存。必要ならmm換算のスケール係数を適用してください。</small>
       </div>
-    </section>
 
-    <section class="canvas-wrap">
-      <div class="canvas-col">
-        <canvas id="canvas" width="720" height="960"></canvas>
-        <div class="preview-wrap">
-          <h4>生（raw）プレビュー &lt;img&gt;</h4>
-          <img id="rawPreview" alt="読み込んだ画像プレビュー" />
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <canvas id="canvas" width="960" height="720"></canvas>
+    </div>
+
+    <div class="card" style="margin-top:8px">
+      <div id="metrics"></div>
+      <div id="classification" style="margin-top:4px"></div>
+      <div id="classDef" style="font-size:0.95rem; line-height:1.6; margin-top:4px"></div>
+      <details style="margin-top:6px">
+        <summary><b>Plumb line（プラムライン）とは？</b></summary>
+        <div id="plumbHelp" style="margin-top:6px">
+          Kendall の姿勢評価で使う「鉛直線」。側面観で、<u>外果（足関節の外側の骨）の少し前</u>を通る基準線です。この線に対して、耳・肩峰・大転子・膝・外果が前後どちらに位置するかで姿勢タイプを判定します。
         </div>
-      </div>
-      <aside class="results">
-        <h3>結果</h3>
-        <div id="metrics" class="metrics"></div>
-        <div id="classification" class="classification"></div>
-        <details open>
-          <summary>診断・ログ</summary>
-          <pre id="log" class="logbox">起動しました。画像を選択してください。</pre>
-        </details>
-      </aside>
-    </section>
-  </main>
+      </details>
+    </div>
 
-  <footer><p>© 2025 AORC / Posture Checker</p></footer>
+    <div class="card" style="margin-top:8px">
+      <label><b>ログ</b></label>
+      <textarea id="log" readonly></textarea>
+    </div>
+  </div>
+</div>
 
-  <script src="./vendor/tf.min.js"></script>
-　<script src="./vendor/pose-detection.min.js"></script>
-　<script src="./script.js"></script>
-<!-- ===== AIライブラリ（順番厳守：tf -> pose-detection -> 自作script） ===== -->
+<!-- 必ずこの順番で読み込む -->
 <script src="./vendor/tf.min.js"></script>
 <script src="./vendor/pose-detection.min.js"></script>
-
-<!-- ロード確認（デバッグ用）。コンソールにも出ます -->
-<script>
-  console.log('tf on window =', typeof window.tf);
-  console.log('poseDetection on window =', typeof window.poseDetection);
-</script>
-
-<script src="./script.js?v=fix6"></script>
-
+<script src="./script.js?v=clinicalA1"></script>
 </body>
 </html>
