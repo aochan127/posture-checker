@@ -51,7 +51,7 @@
   let lastDet = null; // {kps, iw, ih}
 
   const COLORS = ["#ef4444","#f59e0b","#eab308","#3b82f6","#10b981"];
-  const RADIUS = 9;
+  const RADIUS = 4;
 
   // ===== Helpers =====
   function log(msg){
@@ -132,7 +132,7 @@
       ctx.fillStyle = COLORS[i];
       ctx.arc(p.x,p.y,RADIUS,0,Math.PI*2);
       ctx.fill();
-      ctx.font = "bold 13px system-ui,-apple-system,Segoe UI,Noto Sans JP,sans-serif";
+      ctx.font = "bold 8px system-ui,-apple-system,Segoe UI,Noto Sans JP,sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.lineWidth = 4;
