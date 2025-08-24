@@ -1,17 +1,18 @@
-/* posture-checker all-in-one + FIT edition (2025-08-24)
+/* posture-checker all-in-one + FIT + 5-classes (2025-08-24)
    ✅ iPhone対応/高DPR/EXIF回転補正
    ✅ ドラッグ編集/Undo&Redo/拡大鏡（長押し）
    ✅ MoveNet自動抽出 + 左右サイドの妥当性スコア補強 + UIオーバーライド
    ✅ 外果±オフセット（膝×外果で前方符号自動）
    ✅ しきい値スライダー/臨床表示
    ✅ mm換算（身長法/物差し法）
-   ✅ 画像アスペクト比維持（レターボックス表示）←NEW
-   ✅ 軽量化：描画はrequestAnimationFrameで集約、resizeはデバウンス ←NEW
+   ✅ 画像アスペクト比維持（レターボックス表示）
+   ✅ 軽量化：描画はrequestAnimationFrameで集約、resizeはデバウンス
+   ✅ 分類：Ideal + Kypho-lordotic + Lordotic + Flat-back + Sway-back（計5区分）
    依存: tf.min.js → pose-detection.min.js → script.js
    モデル: ./models/movenet/model.json
 */
 (() => {
-  console.log("posture-checker loaded v=allin1-fit2");
+  console.log("posture-checker loaded v=fit3-5class");
 
   // ===== DOM =====
   const canvas = document.getElementById('canvas');
@@ -110,7 +111,7 @@
   // 計測キャッシュ
   let lastMetrics = null;
 
-  // 画像フィット（レターボックス）情報 ← NEW
+  // 画像フィット（レターボックス）情報
   let imgFit = { dx:0, dy:0, dw:0, dh:0, iw:0, ih:0, sx:1, sy:1 };
   function updateImageFit(){
     const rect = canvas.getBoundingClientRect();
@@ -144,7 +145,7 @@
         logEl.scrollTop = logEl.scrollHeight;
       }
     }catch{}
-    // console.log(msg); // ←重ければコメントアウト
+    // console.log(msg); // 重ければコメントアウト
   }
   function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
@@ -237,7 +238,7 @@
     const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0,0,rect.width,rect.height);
 
-    // 画像（アスペクト比維持のfit描画） ← NEW
+    // 画像（アスペクト比維持のfit描画）
     if (imgLoaded){
       ctx.drawImage(img, imgFit.dx, imgFit.dy, imgFit.dw, imgFit.dh);
     }
@@ -327,6 +328,13 @@
     HIP_BWD: -10,
     KNEE_BACK: -5
   };
+
+  // 追加の閾値（UIなしで内部固定）← NEW
+  const EXTRA = {
+    LORD_FHA_MAX: 18,   // Lordotic扱いする最大FHA（Kypho-lordoticよりは小さめ）
+    KNEE_NEAR_BACK: -6  // 膝がほぼ中立（後方へ最大 -6px を許容）
+  };
+
   function bindThresholdControls(){
     if (!thrFhaIdeal) return;
     const sync=()=>{
@@ -381,7 +389,7 @@
   });
   function pxToMm(px){ return PX_PER_MM ? px / PX_PER_MM : null; }
 
-  // ===== 計測 & 判定 =====
+  // ===== 計測 & 判定（5区分） =====
   function compute(){
     if (points.filter(Boolean).length<5 || plumbX<=0){
       metricsDiv && (metricsDiv.innerHTML="<p>5点と鉛直線を設定してください。</p>");
@@ -391,24 +399,41 @@
     }
     const [ear, shoulder, hip, knee] = points;
     const angleDeg = Math.atan2(ear.y - shoulder.y, ear.x - shoulder.x) * 180/Math.PI;
-    const FHA = Math.abs(90 - Math.abs(angleDeg));
-    const hipOffsetPx  = hip.x  - plumbX;
+    const FHA = Math.abs(90 - Math.abs(angleDeg));   // Head-Forward Angle の近似
+    const hipOffsetPx  = hip.x  - plumbX;            // + = 前方, - = 後方
     const kneeOffsetPx = knee.x - plumbX;
 
     const {FHA_IDEAL_MAX,FHA_FORWARD_HD,HIP_IDEAL_ABS,HIP_FWD,HIP_BWD,KNEE_BACK} = THR;
 
-    let type="判定不可";
+    // === 分類（Ideal + 4分類）
+    let type = "判定不可";
+
+    // 0) Ideal（最優先）
     if (Math.abs(hipOffsetPx) <= HIP_IDEAL_ABS && FHA <= FHA_IDEAL_MAX){
-      type="Ideal";
-    }else if (FHA > FHA_FORWARD_HD && hipOffsetPx >= HIP_FWD){
-      type="Kyphotic-lordotic";
-    }else if (hipOffsetPx <= HIP_BWD && FHA >= 8 && kneeOffsetPx <= KNEE_BACK){
-      type="Sway-back";
-    }else{
-      if (FHA < 10 && hipOffsetPx < HIP_FWD) type="Flat-back";
-      else type = (hipOffsetPx < 0) ? "Sway-back" : "Flat-back";
+      type = "Ideal";
+    }
+    // 1) Kyphotic–lordotic：FHA大 + 骨盤前傾（大転子前）
+    else if (FHA > FHA_FORWARD_HD && hipOffsetPx >= HIP_FWD){
+      type = "Kyphotic-lordotic";
+    }
+    // 2) Lordotic：FHAは中等度以下（≲18°） + 大転子前方 + 膝が明らかな後方でない
+    else if (FHA <= EXTRA.LORD_FHA_MAX && hipOffsetPx >= HIP_FWD && kneeOffsetPx >= EXTRA.KNEE_NEAR_BACK){
+      type = "Lordotic";
+    }
+    // 3) Sway-back：大転子が後方かつ膝も後方
+    else if (hipOffsetPx <= HIP_BWD && kneeOffsetPx <= KNEE_BACK){
+      type = "Sway-back";
+    }
+    // 4) Flat-back：FHA小さめ（≲10°）+ 骨盤後傾〜中立
+    else if (FHA < 10 && hipOffsetPx < HIP_FWD){
+      type = "Flat-back";
+    }
+    // 5) 境界ケース：膝が後方寄りならSway-back、そうでなければFlat-backへ
+    else {
+      type = (kneeOffsetPx <= 0) ? "Sway-back" : "Flat-back";
     }
 
+    // mm表示（任意）
     const hipOffsetMm  = pxToMm(hipOffsetPx);
     const kneeOffsetMm = pxToMm(kneeOffsetPx);
     const showMm = (v)=> v!=null ? ` (${v.toFixed(1)} mm)` : "";
@@ -421,10 +446,11 @@
     classDiv && (classDiv.innerHTML = `<p><b>${type}</b></p>`);
 
     const defs = {
-      "Ideal": `耳・肩峰・大転子・膝が鉛直線近傍。FHA≲${FHA_IDEAL_MAX}°、大転子±${HIP_IDEAL_ABS}px以内が目安。`,
-      "Kyphotic-lordotic": `胸椎後弯↑＋腰椎前弯↑、骨盤前傾。FHA>${FHA_FORWARD_HD}°かつ大転子が前方（+${HIP_FWD}px以上）。`,
+      "Ideal": `耳・肩峰・大転子・膝が鉛直線近傍。FHA≲${FHA_IDEAL_MAX}°、大転子±${HIP_IDEAL_ABS}px以内。`,
+      "Kyphotic-lordotic": `胸椎後弯↑＋腰椎前弯↑、骨盤前傾。FHA>${FHA_FORWARD_HD}° かつ大転子が前方（+${HIP_FWD}px以上）。`,
+      "Lordotic": `腰椎前弯↑が優位。FHAは中等度以下（≲${EXTRA.LORD_FHA_MAX}°）、大転子は前方、膝は中立〜前方寄り。`,
       "Flat-back": "胸椎後弯↓・腰椎前弯↓、骨盤後傾。FHA<10°で平坦、中立〜やや後方。",
-      "Sway-back": `骨盤後傾＋股伸展で体幹後方。大転子が線より後（${HIP_BWD}px以下）、膝は${KNEE_BACK}px以下で後方。`
+      "Sway-back": `骨盤後傾＋股伸展で体幹後方。大転子が線より後（${HIP_BWD}px以下）、膝も後方（${KNEE_BACK}px以下）。`
     };
     const cd=document.getElementById('classDef');
     if (cd) cd.innerHTML = defs[type] || "";
@@ -465,10 +491,10 @@
     imgDataURL = dataURL;
     img.onload = ()=>{
       imgLoaded=true;
-      imgFit.iw = img.naturalWidth || img.width;   // ← NEW
-      imgFit.ih = img.naturalHeight|| img.height;  // ← NEW
+      imgFit.iw = img.naturalWidth || img.width;
+      imgFit.ih = img.naturalHeight|| img.height;
       setupCanvasDPR();
-      updateImageFit();                             // ← NEW
+      updateImageFit();
       points=[null,null,null,null,null];
       pointSources=[null,null,null,null,null];
       aiBtn && (aiBtn.disabled=false);
@@ -518,9 +544,8 @@
     return best.idx;
   }
 
-  // 画像矩形外クリックを最近傍にクランプ（任意） ← NEW
+  // 画像矩形外クリックを最近傍にクランプ
   function clampToImageRect(p){
-    const rect = canvas.getBoundingClientRect();
     const x = clamp(p.x, imgFit.dx, imgFit.dx + imgFit.dw);
     const y = clamp(p.y, imgFit.dy, imgFit.dy + imgFit.dh);
     return {x,y};
@@ -537,7 +562,7 @@
     e.preventDefault();
     if (!imgLoaded) return;
     let p = getCanvasPoint(e);
-    p = clampToImageRect(p); // ← NEW
+    p = clampToImageRect(p);
     const hitIdx = hitTest(p);
 
     magnifier.timer && clearTimeout(magnifier.timer);
@@ -559,7 +584,7 @@
   canvas.addEventListener('pointermove', e=>{
     if (!imgLoaded) return;
     let p = getCanvasPoint(e);
-    p = clampToImageRect(p); // ← NEW
+    p = clampToImageRect(p);
     if (magnifier.active){
       magnifier.x=p.x; magnifier.y=p.y; requestDraw();
     }
@@ -654,7 +679,7 @@
       points = points.map(p=> p? {x:p.x*rx, y:p.y*ry} : p);
       plumbX *= rx;
       setupCanvasDPR();
-      updateImageFit(); // ← NEW
+      updateImageFit();
       if (points[4] && points[3]) setPlumbFromAnkle();
       requestDraw(); compute();
     }, 120);
@@ -730,7 +755,7 @@
   // サイドの適用（auto/left/right） with 妥当性スコア補強
   function applySideAndUpdate(){
     if (!lastDet){ log("⚠️ 検出キャッシュなし。AI実行後にサイド切替してください。"); return; }
-    const { kps, iw, ih } = lastDet;
+    const { kps } = lastDet;
 
     const L=['left_ear','left_shoulder','left_hip','left_knee','left_ankle'];
     const R=['right_ear','right_shoulder','right_hip','right_knee','right_ankle'];
@@ -750,7 +775,7 @@
     if (!(ear&&sh&&hip&&knee&&ankle)){ log("⚠️ 必須ランドマーク不足（side="+side+"）。"); return; }
 
     const rect=canvas.getBoundingClientRect();
-    // 画像座標 → キャンバス（レターボックス後）座標に投影 ← NEW
+    // 画像座標 → キャンバス（レターボックス後）座標に投影
     const toCanvas = kp => ({
       x: clamp(imgFit.dx + kp.x * imgFit.sx, 0, rect.width),
       y: clamp(imgFit.dy + kp.y * imgFit.sy, 0, rect.height)
@@ -776,7 +801,7 @@
   // ===== 初期化 =====
   bindThresholdControls?.();
   setupCanvasDPR();
-  updateImageFit();   // ← NEW
+  updateImageFit();
   requestDraw();
 
   // ===== ファイル入力ヘルパ（貼り直し時のため残し） =====
